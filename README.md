@@ -2,7 +2,7 @@
 
 **🏆 Submission for Agentic AI Unleashed: AWS & NVIDIA Hackathon**
 
-> An agentic system that turns dense research papers into grounded, two-host podcast episodes—planned, verified, styled, and produced end-to-end on AWS with NVIDIA NIM.
+> An agentic system that turns dense research papers into grounded, two-host podcast episodes. Its planned, verified, styled, and produced end-to-end on AWS with NVIDIA NIM.
 
 ## 🚀 **Development Strategy: Mock-First, Deploy Later**
 
