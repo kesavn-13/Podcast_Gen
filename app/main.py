@@ -1,46 +1,87 @@
 """
 Paper→Podcast: Agentic + Verified
-Main FastAPI application entry point
+Complete FastAPI Backend for Hackathon Demo
 
 This is the core application for the AWS & NVIDIA Hackathon submission.
 Transforms research papers into verified, engaging podcast episodes.
 """
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import uvicorn
 import os
-from contextlib import asynccontextmanager
+import asyncio
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+import json
+import logging
+from datetime import datetime
 
-from app.config import settings
-from app.api.routes import upload, generation, playback, monitoring
-from app.utils.logging_config import setup_logging
-from app.utils.metrics import setup_metrics
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 
-# Setup logging
-setup_logging()
+# Add project root to path
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Setup metrics collection
-setup_metrics()
+from scripts.test_end_to_end import PodcastAgentOrchestrator
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan handler for startup and shutdown events"""
-    # Startup
-    print("🚀 Paper→Podcast starting up...")
-    print(f"📊 Running in {'DEBUG' if settings.DEBUG else 'PRODUCTION'} mode")
-    print(f"🏗️  Infrastructure: AWS Region {settings.AWS_DEFAULT_REGION}")
-    print(f"🤖 NVIDIA NIM Endpoint: {settings.NVIDIA_NIM_ENDPOINT}")
-    print("✅ Application ready for hackathon demo!")
+# Global orchestrator instance
+orchestrator = None
+
+# Request/Response models
+class PaperUploadResponse(BaseModel):
+    paper_id: str
+    title: str
+    status: str
+    message: str
+
+class OutlineResponse(BaseModel):
+    paper_id: str
+    episode_title: str
+    target_duration_minutes: int
+    segments: List[Dict[str, Any]]
+
+class SegmentRequest(BaseModel):
+    segment_index: int
     
-    yield
-    
-    # Shutdown
-    print("🛑 Paper→Podcast shutting down...")
-    print("💰 Remember to check your AWS costs!")
+class SegmentResponse(BaseModel):
+    segment_index: int
+    title: str
+    script_lines: List[Dict[str, str]]
+    citations: List[str]
+    estimated_duration_s: int
 
+class FactCheckRequest(BaseModel):
+    segment_index: int
+    script_lines: List[Dict[str, str]]
+
+class FactCheckResponse(BaseModel):
+    segment_index: int
+    coverage_ratio: float
+    factcheck_score: float
+    needs_source_idx: List[int]
+    verification_notes: List[str]
+
+class RewriteRequest(BaseModel):
+    segment_index: int
+    script_lines: List[Dict[str, str]]
+    needs_idx: List[int]
+
+class TTSRequest(BaseModel):
+    segment_index: int
+    script_lines: List[Dict[str, str]]
+
+class ReportResponse(BaseModel):
+    paper_id: str
+    factuality: str
+    coverage_pct: int
+    duration_target_s: int
+    duration_est_s: int
+    segments_completed: int
 
 # FastAPI app initialization
 app = FastAPI(
