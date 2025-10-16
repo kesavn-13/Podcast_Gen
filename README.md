@@ -1,10 +1,39 @@
 # Paper→Podcast: Agentic + Verified
 
-** Submission for Agentic AI Unleashed: AWS & NVIDIA Hackathon**
+**🏆 Submission for Agentic AI Unleashed: AWS & NVIDIA Hackathon**
 
 > An agentic system that turns dense research papers into grounded, two-host podcast episodes—planned, verified, styled, and produced end-to-end on AWS with NVIDIA NIM.
 
-##  One-Liner
+## 🚀 **Development Strategy: Mock-First, Deploy Later**
+
+**✅ Available Now (No Credits Required):**
+- Complete functional system with local RAG & FAISS
+- Mock NVIDIA NIM responses (same interfaces as real)
+- Full UI demo capability with realistic data
+- End-to-end workflow testing and validation
+- Conversation style bank with 6 different podcast formats
+
+**🏗️ When Credits Available (1-Command Deploy):**
+- Swap to real NVIDIA NIM on SageMaker endpoints
+- Deploy OpenSearch Serverless for production RAG
+- Enable AWS Polly TTS for audio generation
+- Live hackathon demo recording with real models
+
+**🎯 Quick Start (2 minutes):**
+```bash
+# Clone and setup
+git clone <repo>
+cd Podcast_Gen
+python scripts/setup_local.py  # Installs everything + creates .env
+
+# Test the system
+python scripts/test_rag_system.py
+
+# Start development
+python -m uvicorn app.main:app --reload
+```
+
+## 🎯 One-Liner
 
 Transform scholarly PDFs into engaging, fact-checked podcast episodes with autonomous planning, dual-memory RAG, and inline verification—all while preserving source fidelity.
 
@@ -140,40 +169,79 @@ graph TD
 
 ## 🛠️ Setup & Deployment
 
-### Prerequisites
-- AWS Account with SageMaker access
-- NVIDIA NGC account for NIM access
-- Python 3.9+
-- Docker (for local development)
+### 🚀 **Option A: Mock Development (No Credits Required)**
 
-### Quick Start
+**Prerequisites:**
+- Python 3.8+
+- 2GB free disk space
+
+**One-Command Setup:**
 ```bash
-# Clone repository
-git clone https://github.com/kesavn-13/Podcast_Gen.git
+# Clone repository  
+git clone <your-repo-url>
 cd Podcast_Gen
 
-# Install dependencies
-pip install -r requirements.txt
+# Automated setup (installs everything, creates config)
+python scripts/setup_local.py
 
-# Configure AWS credentials
-aws configure
+# Test the complete system
+python scripts/test_rag_system.py
 
-# Deploy infrastructure
-cd infrastructure
-terraform init && terraform apply
+# Start development servers
+python -m uvicorn app.main:app --reload  # Backend on :8000
+streamlit run app/frontend.py            # Frontend on :8501
+```
 
-# Start application
+**What you get:**
+- ✅ Full RAG system with local FAISS indexing  
+- ✅ Mock NVIDIA NIM clients (same interfaces as real)
+- ✅ 6 podcast conversation styles (NPR, tech, academic, etc.)
+- ✅ Complete UI for paper upload and podcast generation
+- ✅ Fact-checking and content verification workflows
+- ✅ Sample papers for immediate testing
+
+### 🏗️ **Option B: AWS Production (Requires $100 Credits)**
+
+**Prerequisites:**
+- AWS Account with SageMaker access
+- NVIDIA NGC account for NIM access  
+- AWS CLI configured
+
+**Deploy Infrastructure:**
+```bash
+# Deploy infrastructure (takes ~15-20 minutes)
+cd infrastructure/terraform
+terraform init
+terraform apply -var="environment=hackathon"
+
+# Configure endpoints (auto-generated after deploy)
+export SAGEMAKER_ENDPOINT_REASONING=$(terraform output reasoning_endpoint)
+export SAGEMAKER_ENDPOINT_EMBEDDING=$(terraform output embedding_endpoint)
+
+# Switch from mock to real services
+export USE_MOCK_CLIENTS=false
+
+# Start with real AWS services
 python -m uvicorn app.main:app --reload
 ```
 
-### Environment Variables
+### 🔧 **Configuration (.env file)**
+
+The setup script creates this automatically, but you can customize:
+
 ```bash
-# Required for hackathon
-NVIDIA_NIM_ENDPOINT=your-sagemaker-endpoint
-NVIDIA_API_KEY=your-nim-api-key
-AWS_REGION=us-east-1
+# Development Mode (Default)
+ENV=development
+USE_MOCK_CLIENTS=true
+USE_LOCAL_RAG=true
+
+# Production Mode (When you have credits)
+ENV=production  
+USE_MOCK_CLIENTS=false
+USE_LOCAL_RAG=false
+SAGEMAKER_ENDPOINT_REASONING=your-endpoint
+SAGEMAKER_ENDPOINT_EMBEDDING=your-endpoint
 OPENSEARCH_ENDPOINT=your-opensearch-url
-S3_BUCKET=your-s3-bucket
 ```
 
 
