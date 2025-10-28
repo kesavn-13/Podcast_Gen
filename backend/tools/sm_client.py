@@ -283,9 +283,13 @@ class MockEmbeddingClient:
 
 
 # Factory function to create clients based on environment
-def create_clients(use_mock: bool = None) -> tuple[MockReasonerClient, MockEmbeddingClient]:
+def create_clients(use_mock: bool = None) -> tuple:
     """
-    Create mock or real clients based on configuration
+    Create reasoning and embedding clients with priority order:
+    1. Google Gemini API (if configured)
+    2. Local LLM via Ollama (if configured) 
+    3. Mock clients (for development)
+    4. Real SageMaker NIM clients (for production)
     
     Args:
         use_mock: Override for mock usage (defaults to env setting)
@@ -293,6 +297,45 @@ def create_clients(use_mock: bool = None) -> tuple[MockReasonerClient, MockEmbed
     Returns:
         Tuple of (reasoner_client, embedding_client)
     """
+    # Priority 1: Google Gemini API
+    google_api_key = os.getenv('GOOGLE_API_KEY')
+    use_google = os.getenv('USE_GOOGLE_LLM', 'true').lower() == 'true'
+    
+    if google_api_key and use_google and google_api_key != 'your-google-api-key-here':
+        try:
+            from backend.tools.google_llm_client import GoogleGeminiClient
+            reasoning_client = GoogleGeminiClient(api_key=google_api_key)
+            
+            # Try Google embeddings, fallback to mock if quota exceeded
+            try:
+                from backend.tools.google_llm_client import GoogleEmbeddingClient
+                embedding_client = GoogleEmbeddingClient(api_key=google_api_key)
+                print("🤖 Using Google Gemini LLM + Google Embeddings")
+            except Exception:
+                print("⚠️  Google Embeddings quota exceeded, using mock embeddings")
+                embedding_client = MockEmbeddingClient()
+                print("🤖 Using Google Gemini LLM + Mock Embeddings")
+            
+            return reasoning_client, embedding_client
+        except ImportError as e:
+            print(f"⚠️  Google LLM not available ({e}), trying alternatives...")
+        except Exception as e:
+            print(f"⚠️  Google LLM initialization failed ({e}), trying alternatives...")
+    
+    # Priority 2: Local LLM (Ollama)
+    use_local = os.getenv('USE_LOCAL_LLM', 'false').lower() == 'true'
+    if use_local:
+        try:
+            from backend.tools.local_llm_client import create_local_clients
+            reasoning_client, embedding_client = create_local_clients()
+            print("🦙 Using local LLM (Ollama) clients")
+            return reasoning_client, embedding_client
+        except ImportError:
+            print("⚠️  Local LLM not available, falling back to mocks")
+        except Exception as e:
+            print(f"⚠️  Local LLM initialization failed ({e}), falling back to mocks")
+    
+    # Priority 3: Mock clients (default for development)
     if use_mock is None:
         use_mock = os.getenv('USE_MOCK_SERVICES', 'true').lower() == 'true'
     
@@ -300,16 +343,17 @@ def create_clients(use_mock: bool = None) -> tuple[MockReasonerClient, MockEmbed
         reasoner = MockReasonerClient()
         embedding = MockEmbeddingClient()
         print("🎭 Using mock clients for development")
-    else:
-        # Import real clients when not using mocks
-        try:
-            from .sagemaker_client import SageMakerReasonerClient, SageMakerEmbeddingClient
-            reasoner = SageMakerReasonerClient()
-            embedding = SageMakerEmbeddingClient()
-            print("🚀 Using real SageMaker NIM clients")
-        except ImportError:
-            print("⚠️  Real clients not available, falling back to mocks")
-            reasoner = MockReasonerClient()
-            embedding = MockEmbeddingClient()
+        return reasoner, embedding
     
-    return reasoner, embedding
+    # Priority 4: Real SageMaker NIM clients (production)
+    try:
+        from .sagemaker_client import SageMakerReasonerClient, SageMakerEmbeddingClient
+        reasoner = SageMakerReasonerClient()
+        embedding = SageMakerEmbeddingClient()
+        print("🚀 Using real SageMaker NIM clients")
+        return reasoner, embedding
+    except ImportError:
+        print("⚠️  Real clients not available, falling back to mocks")
+        reasoner = MockReasonerClient()
+        embedding = MockEmbeddingClient()
+        return reasoner, embedding

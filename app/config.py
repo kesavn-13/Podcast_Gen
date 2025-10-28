@@ -16,14 +16,19 @@ class Settings(BaseSettings):
     # HACKATHON SUBMISSION REQUIREMENTS
     # ============================================================================
     
-    # NVIDIA NIM Configuration (REQUIRED)
-    NVIDIA_NIM_ENDPOINT: str = Field(..., description="NVIDIA NIM endpoint URL")
-    NVIDIA_API_KEY: str = Field(..., description="NVIDIA API key")
+    # NVIDIA NIM Configuration (OPTIONAL - for AWS deployment)
+    NVIDIA_NIM_ENDPOINT: Optional[str] = Field(None, description="NVIDIA NIM endpoint URL")
+    NVIDIA_API_KEY: Optional[str] = Field(None, description="NVIDIA API key")
     NVIDIA_ORG_ID: Optional[str] = Field(None, description="NVIDIA organization ID")
     
     # Specific model endpoints
-    LLAMA_NEMOTRON_ENDPOINT: str = Field(..., description="Llama Nemotron endpoint")
-    RETRIEVAL_NIM_ENDPOINT: str = Field(..., description="Retrieval NIM endpoint")
+    LLAMA_NEMOTRON_ENDPOINT: Optional[str] = Field(None, description="Llama Nemotron endpoint")
+    RETRIEVAL_NIM_ENDPOINT: Optional[str] = Field(None, description="Retrieval NIM endpoint")
+    
+    # Google Gemini Configuration (PRIMARY)
+    GOOGLE_API_KEY: str = Field(..., description="Google Gemini API key")
+    GOOGLE_MODEL: str = Field("gemini-1.5-pro", description="Google Gemini model")
+    GOOGLE_EMBEDDING_MODEL: str = Field("models/embedding-001", description="Google embedding model")
     
     # ============================================================================
     # AWS CONFIGURATION
@@ -32,20 +37,20 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: Optional[str] = Field(None, description="AWS access key")
     AWS_SECRET_ACCESS_KEY: Optional[str] = Field(None, description="AWS secret key")
     AWS_DEFAULT_REGION: str = Field("us-east-1", description="AWS region")
-    AWS_ACCOUNT_ID: str = Field(..., description="AWS account ID")
+    AWS_ACCOUNT_ID: Optional[str] = Field(None, description="AWS account ID")
     
     # SageMaker Configuration
-    SAGEMAKER_EXECUTION_ROLE: str = Field(..., description="SageMaker execution role ARN")
+    SAGEMAKER_EXECUTION_ROLE: Optional[str] = Field(None, description="SageMaker execution role ARN")
     SAGEMAKER_INSTANCE_TYPE: str = Field("ml.g4dn.xlarge", description="SageMaker instance type")
     
-    # OpenSearch Serverless
-    OPENSEARCH_ENDPOINT: str = Field(..., description="OpenSearch endpoint URL")
+    # OpenSearch Serverless (Optional for local development)
+    OPENSEARCH_ENDPOINT: Optional[str] = Field(None, description="OpenSearch endpoint URL")
     OPENSEARCH_INDEX_NAME: str = Field("paper-podcast-index", description="Main index name")
     OPENSEARCH_FACTS_INDEX: str = Field("facts-index", description="Facts index name")
     OPENSEARCH_STYLE_INDEX: str = Field("style-index", description="Style index name")
     
-    # S3 Configuration
-    S3_BUCKET_NAME: str = Field(..., description="S3 bucket name")
+    # S3 Configuration (Optional for local development)
+    S3_BUCKET_NAME: Optional[str] = Field(None, description="S3 bucket name")
     S3_PAPERS_PREFIX: str = Field("papers/", description="S3 prefix for papers")
     S3_AUDIO_PREFIX: str = Field("audio/", description="S3 prefix for audio")
     S3_TRANSCRIPTS_PREFIX: str = Field("transcripts/", description="S3 prefix for transcripts")
@@ -88,11 +93,16 @@ class Settings(BaseSettings):
     SAMPLE_RATE: int = Field(22050, description="Audio sample rate")
     SILENCE_DURATION: float = Field(0.5, description="Silence duration between segments")
     
-    # Episode Structure
-    DEFAULT_INTRO_DURATION: int = Field(60, description="Default intro duration in seconds")
-    DEFAULT_CORE_DURATION: int = Field(300, description="Default core duration in seconds")
-    DEFAULT_OUTRO_DURATION: int = Field(60, description="Default outro duration in seconds")
-    MAX_TOTAL_DURATION: int = Field(600, description="Maximum total duration in seconds")
+    # Episode Structure - Extended for longer podcasts
+    DEFAULT_INTRO_DURATION: int = Field(120, description="Default intro duration in seconds")
+    DEFAULT_CORE_DURATION: int = Field(1200, description="Default core duration in seconds (20 minutes)")
+    DEFAULT_OUTRO_DURATION: int = Field(180, description="Default outro duration in seconds")
+    MAX_TOTAL_DURATION: int = Field(1800, description="Maximum total duration in seconds (30 minutes)")
+    
+    # Podcast Generation Settings
+    SEGMENTS_PER_EPISODE: int = Field(8, description="Number of segments per episode")
+    WORDS_PER_SEGMENT: int = Field(200, description="Target words per segment")
+    SPEAKING_RATE_WPM: int = Field(160, description="Average speaking rate in words per minute")
     
     # ============================================================================
     # COST CONTROLS (HACKATHON BUDGET MANAGEMENT)
