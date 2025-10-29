@@ -468,13 +468,28 @@ class PodcastAudioProducer:
             Path to final podcast audio file
         """
         if not episode_id:
-            episode_id = f"episode_{hash(str(script_segments))}"
+            # Create a safe hash from script segments
+            try:
+                segment_texts = [seg.get('text', '')[:50] for seg in script_segments if isinstance(seg, dict)]
+                hash_input = ''.join(segment_texts)
+                episode_id = f"episode_{abs(hash(hash_input))}"
+            except Exception:
+                episode_id = f"episode_{len(script_segments)}_{hash('fallback')}"
         
         logger.info(f"🎬 Generating podcast: {episode_id}")
+        
+        # Debug: Log input data
+        logger.info(f"📊 Processing {len(script_segments)} script segments")
+        for i, segment in enumerate(script_segments):
+            logger.info(f"   Segment {i+1}: {type(segment)} - {str(segment)[:100]}...")
         
         # Convert script to audio segments
         audio_segments = []
         for i, segment in enumerate(script_segments):
+            if not isinstance(segment, dict):
+                logger.error(f"❌ Segment {i} is not a dict: {type(segment)} - {segment}")
+                continue
+                
             audio_seg = AudioSegment(
                 text=segment.get('text', ''),
                 speaker=segment.get('speaker', 'narrator'),
