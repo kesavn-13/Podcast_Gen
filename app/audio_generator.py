@@ -45,19 +45,19 @@ class RealTTSEngine:
         self.voices = {
             "host1": {
                 "name": "Dr. Sarah Chen",
-                "voice_index": 0,  # Usually female voice
+                "voice_index": 1,  # Microsoft Zira (Female)
                 "rate": 170,       # Words per minute
                 "volume": 0.9
             },
             "host2": {
                 "name": "Prof. Mike Rodriguez", 
-                "voice_index": 1,  # Usually male voice
+                "voice_index": 0,  # Microsoft David (Male)
                 "rate": 160,       # Slightly slower
                 "volume": 0.95
             },
             "narrator": {
                 "name": "System Narrator",
-                "voice_index": 0,  # Clear voice
+                "voice_index": 1,  # Microsoft Zira (Female)
                 "rate": 180,       # Slightly faster
                 "volume": 0.85
             }
@@ -158,6 +158,61 @@ class RealTTSEngine:
         clean_text = clean_text.replace('NLP', 'N.L.P.')
         
         return clean_text
+    
+    async def _create_tone_audio(self, output_path: Path, speaker: str, duration: float):
+        """Create actual playable tone-based audio for demo purposes"""
+        try:
+            import numpy as np
+            import wave
+            
+            sample_rate = 22050
+            
+            # Different tones for different speakers
+            speaker_frequencies = {
+                "host1": 440,    # A4 - higher pitch (female)
+                "host2": 330,    # E4 - lower pitch (male) 
+                "narrator": 385  # G4 - neutral pitch
+            }
+            
+            base_freq = speaker_frequencies.get(speaker, 440)
+            
+            # Generate audio samples
+            samples = int(sample_rate * duration)
+            t = np.linspace(0, duration, samples)
+            
+            # Create a pleasant tone with some modulation
+            audio = np.sin(2 * np.pi * base_freq * t) * 0.3
+            audio += np.sin(2 * np.pi * base_freq * 1.5 * t) * 0.1  # Harmonic
+            
+            # Add envelope to avoid clicks
+            envelope = np.exp(-t / (duration * 0.8))
+            audio *= envelope
+            
+            # Convert to 16-bit integers
+            audio_int = (audio * 32767).astype(np.int16)
+            
+            # Write WAV file
+            with wave.open(str(output_path), 'w') as wav_file:
+                wav_file.setnchannels(1)  # Mono
+                wav_file.setsampwidth(2)  # 2 bytes per sample
+                wav_file.setframerate(sample_rate)
+                wav_file.writeframes(audio_int.tobytes())
+            
+            logger.info(f"🎵 Generated tone audio: {speaker} - {duration:.1f}s at {base_freq}Hz")
+            
+        except Exception as e:
+            logger.error(f"Failed to create tone audio: {e}")
+            # Create silent WAV as last resort
+            try:
+                import wave
+                with wave.open(str(output_path), 'w') as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(22050)
+                    wav_file.writeframes(b'\x00\x00' * int(22050 * max(1.0, duration)))
+            except Exception:
+                # Create empty file as absolute last resort
+                output_path.touch()
 
 
 class MockTTSEngine:
