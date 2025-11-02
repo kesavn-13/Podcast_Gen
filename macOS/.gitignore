@@ -1,0 +1,352 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# ============================================================================
+# PROJECT SPECIFIC
+# ============================================================================
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Temporary files
+temp/
+tmp/
+.temp/
+.tmp/
+
+# Data directories
+data/uploads/
+data/processed/
+data/cache/
+data/temp/
+
+# Generated audio files
+*.mp3
+*.wav
+*.m4a
+audio_output/
+
+# Generated transcripts
+transcripts/
+*.txt
+*.srt
+
+# PDF uploads
+uploads/
+*.pdf
+
+# Model cache
+.cache/
+models/
+checkpoints/
+
+# ============================================================================
+# AWS & CLOUD
+# ============================================================================
+
+# AWS credentials (use IAM roles instead)
+.aws/
+aws-credentials.json
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.tfvars
+
+# Pulumi
+Pulumi.*.yaml
+.pulumi/
+
+# CloudFormation
+*.cf.json
+*.cf.yaml
+
+# ============================================================================
+# DEVELOPMENT TOOLS
+# ============================================================================
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# ============================================================================
+# MONITORING & METRICS
+# ============================================================================
+
+# Prometheus
+prometheus_multiproc_dir/
+
+# Grafana
+grafana_data/
+
+# Metrics
+metrics/
+*.prom
+
+# ============================================================================
+# CONTAINERIZATION
+# ============================================================================
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# Kubernetes secrets
+k8s-secrets/
+*.secret.yaml
+
+# ============================================================================
+# FRONTEND (Next.js)
+# ============================================================================
+
+# Dependencies
+ui/nextjs/node_modules/
+ui/nextjs/.next/
+ui/nextjs/out/
+
+# Production build
+ui/nextjs/build/
+
+# Runtime data
+ui/nextjs/pids
+ui/nextjs/*.pid
+ui/nextjs/*.seed
+ui/nextjs/*.pid.lock
+
+# Coverage directory used by tools like istanbul
+ui/nextjs/coverage/
+
+# nyc test coverage
+ui/nextjs/.nyc_output
+
+# ESLint cache
+ui/nextjs/.eslintcache
+
+# Optional npm cache directory
+ui/nextjs/.npm
+
+# Optional REPL history
+ui/nextjs/.node_repl_history
+
+# Output of 'npm pack'
+ui/nextjs/*.tgz
+
+# Yarn Integrity file
+ui/nextjs/.yarn-integrity
+
+# dotenv environment variables file
+ui/nextjs/.env
+ui/nextjs/.env.local
+ui/nextjs/.env.development.local
+ui/nextjs/.env.test.local
+ui/nextjs/.env.production.local
+
+# Vercel
+ui/nextjs/.vercel
+
+# ============================================================================
+# TESTING
+# ============================================================================
+
+# Test artifacts
+test-reports/
+coverage-reports/
+.coverage
+htmlcov/
+
+# Mock data
+tests/fixtures/generated/
+
+# Performance test results
+benchmark_results/
+
+# ============================================================================
+# DOCUMENTATION
+# ============================================================================
+
+# Generated docs
+docs/_build/
+docs/site/
+
+# ============================================================================
+# HACKATHON SPECIFIC
+# ============================================================================
+
+# Demo recordings
+demo_recordings/
+*.mov
+*.mp4
+*.avi
+
+# Submission artifacts
+submission_package/
+hackathon_demo.zip
+
+# Cost tracking
+cost_reports/
+billing_alerts/
+
+# Performance benchmarks
+benchmarks/results/
+performance_logs/
+
+# Sample outputs (keep some for demo)
+# But exclude large generated files
+samples/generated/*.mp3
+samples/generated/*.wav
+samples/processed/
+
+# Backup files
+*.bak
+*.backup
+*.old
