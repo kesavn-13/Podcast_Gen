@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from backend.tools.sm_client import create_clients
-from app.audio_generator import PodcastAudioProducer
+from app.audio_generator import PodcastAudioProducer, create_audio_producer
 from app.styles.podcast_structure import get_podcast_structure, format_podcast_segment, should_add_ad_break
 
 # Configure logging
@@ -40,14 +40,20 @@ class SimplifiedPaperTester:
         
         # Initialize clients
         self.reasoner_client, self.embedding_client = create_clients()
-        self.audio_producer = PodcastAudioProducer(podcast_style=podcast_style)
+        # Use factory so .env flags (e.g., USE_COQUI_LOCAL_TTS) are honored
+        self.audio_producer = create_audio_producer()
+        # Ensure the selected style is applied on the producer
+        try:
+            self.audio_producer.podcast_style = podcast_style
+        except Exception:
+            pass
         
         print(f"🎭 Initialized with podcast style: {podcast_style}")
         
         # Show available styles
         try:
-            from app.audio_generator import RealTTSEngine
-            available_styles = RealTTSEngine.list_available_styles()
+            from app.styles import list_all_styles as _list_styles
+            available_styles = _list_styles()
             print("🎙️ Available podcast styles:")
             for style_id, description in available_styles.items():
                 indicator = "👉" if style_id == podcast_style else "  "
@@ -646,6 +652,7 @@ class SimplifiedPaperTester:
 async def main():
     """Main test function with podcast style selection"""
     import argparse
+    import os
     
     # Parse command line arguments for style selection
     parser = argparse.ArgumentParser(description='Test PDF paper processing with podcast styles')
@@ -654,11 +661,26 @@ async def main():
                        default='layperson',
                        help='Choose podcast conversation style (default: layperson)')
     
+    # Support shorthand flags like --classroom (without --style)
+    argv = sys.argv[1:]
+    styles = ['layperson', 'classroom', 'tech_interview', 'journal_club', 'npr_calm', 'news_flash', 'tech_energetic', 'investigative', 'debate_format']
+    if not any(a.startswith('--style') for a in argv):
+        for a in argv:
+            if a.startswith('--'):
+                candidate = a[2:]
+                if candidate in styles:
+                    # Insert as --style candidate before parsing
+                    argv = ['--style', candidate] + [x for x in argv if x != a]
+                    break
+
     # Parse known args (ignore unknown ones for compatibility)
-    args, _ = parser.parse_known_args()
+    args, _ = parser.parse_known_args(argv)
     
     print(f"🎙️ Selected podcast style: {args.style}")
     
+    # Export style to environment for TTS engine selection
+    os.environ['PODCAST_STYLE'] = args.style
+
     try:
         tester = SimplifiedPaperTester(podcast_style=args.style)
         success = await tester.run_simplified_test()
