@@ -367,6 +367,9 @@ The system's autonomous capabilities, quality assurance mechanisms, and scalable
 - `/infrastructure/` - AWS and container deployment configurations
 
 **Development Status:** Production-ready with live AWS deployment and verified NVIDIA NIM integration.
+
+**Environment Configuration:**
+```bash
 SAGEMAKER_ENDPOINT_REASONING=your-endpoint
 SAGEMAKER_ENDPOINT_EMBEDDING=your-endpoint
 OPENSEARCH_ENDPOINT=your-opensearch-url
