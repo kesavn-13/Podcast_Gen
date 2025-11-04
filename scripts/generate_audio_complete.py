@@ -47,8 +47,13 @@ async def generate_complete_audio():
     print(f"🎬 Segments: {episode_data['total_segments']}")
     print(f"⏱️  Duration: {episode_data['total_duration_estimate']/60:.1f} minutes")
     
-    # Initialize TTS engine
-    tts_engine = RealTTSEngine(audio_dir="temp/audio")
+    # Initialize TTS engine with natural voices and professional style
+    tts_engine = RealTTSEngine(
+        audio_dir="temp/audio",
+        style_name="npr_calm",  # Professional podcast style
+        use_coqui=True          # Enable Google TTS + enhanced pyttsx3
+    )
+    print("🎤 Using natural voices: Google TTS + Enhanced pyttsx3 + NPR Calm style")
     
     # Create sample conversational scripts for each segment
     segment_scripts = {

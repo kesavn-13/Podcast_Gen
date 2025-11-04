@@ -151,8 +151,13 @@ class DemoVideoProducer:
                 "emotion": "professional"
             })
         
-        # Generate audio
-        audio_producer = create_audio_producer(use_aws=False)  # Use mock for now
+        # Generate audio with natural voices for professional demo
+        audio_producer = create_audio_producer(
+            use_aws=False,              # Use local TTS  
+            use_real_tts=True,         # Enable real TTS (not mock)
+            podcast_style="npr_calm",  # Professional NPR-style for demo
+            use_natural_voices=True    # Enable Google TTS + enhanced pyttsx3
+        )
         narration_file = await audio_producer.generate_podcast_audio(
             narration_segments, 
             "demo_narration"

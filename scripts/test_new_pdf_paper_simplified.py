@@ -8,10 +8,11 @@ import os
 import sys
 import asyncio
 import json
-from pathlib import Path
 import logging
-from datetime import datetime
+import re
 import time
+from datetime import datetime
+from pathlib import Path
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -28,9 +29,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class SimplifiedPaperTester:
-    """Test workflow with direct text processing (no embeddings)"""
+    """Test workflow with NVIDIA NIMs and podcast styles"""
     
-    def __init__(self, podcast_style: str = "friendly_chat"):
+    def __init__(self, podcast_style: str = "layperson"):
         self.paper_path = "samples/papers/LightEndoStereo- A Real-time Lightweight Stereo Matching Method for Endoscopy Images.pdf"
         self.output_dir = Path("temp/new_paper_test")
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -38,25 +39,117 @@ class SimplifiedPaperTester:
         # Store selected podcast style
         self.podcast_style = podcast_style
         
-        # Initialize clients
+        # Check if we're in hackathon mode
+        hackathon_mode = os.getenv('HACKATHON_MODE', 'false').lower() == 'true'
+        use_nvidia = os.getenv('USE_NVIDIA_NIM', 'false').lower() == 'true'
+        
+        # Initialize clients (will automatically use NVIDIA if configured)
         self.reasoner_client, self.embedding_client = create_clients()
-        self.audio_producer = PodcastAudioProducer(podcast_style=podcast_style)
+        
+        # Show which clients we're using
+        llm_type = type(self.reasoner_client).__name__
+        embed_type = type(self.embedding_client).__name__
+        
+        if hackathon_mode and use_nvidia:
+            print(f"🏆 HACKATHON MODE: Using NVIDIA NIMs")
+            print(f"   🤖 LLM: {llm_type}")
+            print(f"   🔍 Embedding: {embed_type}")
+        else:
+            print(f"🤖 Using LLM: {llm_type}, Embedding: {embed_type}")
+        
+        # Audio configuration flags so we can disable resource-heavy pieces on small nodes
+        self.use_natural_voices = os.getenv('USE_NATURAL_VOICES', 'true').lower() == 'true'
+        self.use_real_tts = os.getenv('USE_REAL_TTS', 'true').lower() == 'true'
+        self.generate_audio_enabled = os.getenv('GENERATE_PODCAST_AUDIO', 'true').lower() == 'true'
+
+        # Initialize audio producer only when audio output is enabled
+        self.audio_producer = None
+        if self.generate_audio_enabled:
+            self.audio_producer = PodcastAudioProducer(
+                use_natural_voices=self.use_natural_voices,
+                podcast_style=podcast_style,
+                use_real_tts=self.use_real_tts
+            )
         
         print(f"🎭 Initialized with podcast style: {podcast_style}")
         
-        # Show available styles
-        try:
-            from app.audio_generator import RealTTSEngine
-            available_styles = RealTTSEngine.list_available_styles()
-            print("🎙️ Available podcast styles:")
-            for style_id, description in available_styles.items():
-                indicator = "👉" if style_id == podcast_style else "  "
-                print(f"   {indicator} {style_id}: {description}")
-            print()
-        except Exception as e:
-            print(f"⚠️  Could not load styles info: {e}")
-            print()
+        # Show available style features
+        style_features = {
+            'layperson': 'Friendly, accessible explanations for general audience',
+            'classroom': 'Teacher-student dynamic with structured learning approach',
+            'tech_interview': 'Technical deep dive with expert analysis and methodology focus',
+            'journal_club': 'Academic peer review and critical discussion of research findings',
+            'npr_calm': 'Professional, measured NPR-style presentation with thoughtful pacing',
+            'news_flash': 'Fast-paced, urgent news bulletin style with breaking research updates',
+            'tech_energetic': 'High-energy tech discussion with excitement about innovations',
+            'debate_format': 'Opposing viewpoints with spirited disagreement and critical analysis'
+        }
         
+        if podcast_style in style_features:
+            print(f"📝 Style features: {style_features[podcast_style]}")
+
+        if not self.generate_audio_enabled:
+            print("🔇 Audio generation disabled via GENERATE_PODCAST_AUDIO=false")
+        else:
+            if self.use_real_tts:
+                voice_note = "Google TTS + Enhanced pyttsx3" if self.use_natural_voices else "mock voice library"
+                print(f"🎤 Natural voices enabled: {voice_note}")
+            else:
+                print("🎤 Using mock TTS pipeline (USE_REAL_TTS=false)")
+            print(f"✨ Conversation styles integrated for human-like dialogue")
+
+            # Show available styles when TTS is active
+            try:
+                from app.audio_generator import RealTTSEngine
+                available_styles = RealTTSEngine.list_available_styles()
+                print("🎙️ Available podcast styles:")
+                for style_id, description in available_styles.items():
+                    indicator = "👉" if style_id == podcast_style else "  "
+                    print(f"   {indicator} {style_id}: {description}")
+                print()
+            except Exception as e:
+                print(f"⚠️  Could not load styles info: {e}")
+                print()
+        
+    def _load_json_with_fixes(self, raw_json, context=""):
+        """Attempt to parse JSON string while fixing common formatting issues."""
+        if raw_json is None:
+            return {}
+        if isinstance(raw_json, dict):
+            return raw_json
+
+        if not isinstance(raw_json, str):
+            return raw_json
+
+        cleaned = raw_json.strip()
+
+        # Normalize smart quotes and apostrophes
+        replacements = {
+            "“": '"',
+            "”": '"',
+            "’": "'",
+            "\u201c": '"',
+            "\u201d": '"',
+        }
+        for old, new in replacements.items():
+            cleaned = cleaned.replace(old, new)
+
+        # Fix keys accidentally including colon inside the quotes, e.g. "text: "
+        cleaned = re.sub(r'"([A-Za-z0-9_]+)\s*:\s"', r'"\1": "', cleaned)
+
+        # Remove trailing commas before closing braces/brackets
+        cleaned = re.sub(r',\s*([}\]])', r'\1', cleaned)
+
+        # Strip any trailing markdown fences accidentally left over
+        if cleaned.startswith('```') and cleaned.endswith('```'):
+            cleaned = cleaned.strip('`')
+
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError as exc:
+            preview = cleaned[:500]
+            raise ValueError(f"Failed to parse JSON{f' for {context}' if context else ''}: {exc}. Preview: {preview}")
+
     async def extract_pdf_text(self):
         """Extract text from PDF"""
         print("\n🔍 Step 1: PDF Text Extraction")
@@ -110,7 +203,9 @@ class SimplifiedPaperTester:
             5. Clinical Applications & Impact (150 seconds)
             6. Conclusions & Future Work (75 seconds)
             
-            Return a JSON object with this exact structure:
+            IMPORTANT: Respond with ONLY valid JSON. No markdown, no explanations, no code blocks. Just the raw JSON object.
+            
+            JSON structure:
             {{
                 "title": "LightEndoStereo: Real-time Stereo Matching for Endoscopy",
                 "description": "Complete analysis of lightweight stereo matching for medical endoscopy",
@@ -130,13 +225,38 @@ class SimplifiedPaperTester:
             
             # Parse JSON response
             try:
-                # Handle the response format from Google Gemini
+                # Handle the response format from Google Gemini and NVIDIA
                 if isinstance(response, dict) and 'choices' in response:
                     # Extract content from the API response format
-                    content = response['choices'][0]['message']['content']
-                    outline_data = json.loads(content)
+                        content = response['choices'][0]['message']['content']
+                        outline_data = self._load_json_with_fixes(content, context="outline generation (choices)")
+                elif isinstance(response, dict) and 'content' in response:
+                    # NVIDIA NIM format - content may be wrapped in markdown
+                    content = response['content']
+                    
+                    # Extract JSON from markdown code blocks if present
+                    if '```json' in content:
+                        # Find JSON block
+                        json_start = content.find('```json') + 7
+                        json_end = content.find('```', json_start)
+                        if json_end != -1:
+                            json_content = content[json_start:json_end].strip()
+                        else:
+                            json_content = content[json_start:].strip()
+                    elif '```' in content:
+                        # Generic code block
+                        json_start = content.find('```') + 3
+                        json_end = content.find('```', json_start)
+                        if json_end != -1:
+                            json_content = content[json_start:json_end].strip()
+                        else:
+                            json_content = content[json_start:].strip()
+                    else:
+                        json_content = content
+                    
+                        outline_data = self._load_json_with_fixes(json_content, context="outline generation (nim content)")
                 elif isinstance(response, str):
-                    outline_data = json.loads(response)
+                    outline_data = self._load_json_with_fixes(response, context="outline generation (string)")
                 else:
                     outline_data = response
                 
@@ -163,7 +283,14 @@ class SimplifiedPaperTester:
             except (json.JSONDecodeError, TypeError) as e:
                 print(f"❌ Failed to parse JSON response: {e}")
                 print(f"Raw response type: {type(response)}")
-                print(f"Raw response: {str(response)[:500]}...")
+                print(f"Raw response: {str(response)[:1000]}...")
+                
+                # Try to extract and show the actual JSON content
+                if isinstance(response, dict) and 'content' in response:
+                    print(f"📝 JSON Content Length: {len(response['content'])}")
+                    print(f"📝 JSON Content Preview: {response['content'][:2000]}...")
+                    if len(response['content']) > 2000:
+                        print(f"📝 JSON Content End: ...{response['content'][-500:]}")
                 return None
                 
         except Exception as e:
@@ -344,7 +471,9 @@ class SimplifiedPaperTester:
             - Create substantive disagreements about methodology, conclusions, implications
             - Sound like colleagues having a spirited debate where they challenge each other's thinking
             
-            Return JSON format:
+            IMPORTANT: Respond with ONLY valid JSON. No markdown, no explanations, no code blocks. Just the raw JSON object.
+            
+            JSON format:
             {{
                 "script": [
                     {{"speaker": "host1", "text": "This research shows some really promising results..."}},
@@ -368,7 +497,10 @@ class SimplifiedPaperTester:
             - host2 (Dr. Alex): Male researcher, asks clarifying questions and provides insights
             
             Make it engaging and accessible while maintaining technical accuracy.
-            Return JSON format:
+            
+            IMPORTANT: Respond with ONLY valid JSON. No markdown, no explanations, no code blocks. Just the raw JSON object.
+            
+            JSON format:
             {{
                 "script": [
                     {{"speaker": "host1", "text": "Welcome to our discussion on LightEndoStereo..."}},
@@ -382,12 +514,51 @@ class SimplifiedPaperTester:
             messages = [{"role": "user", "content": script_prompt}]
             response = await self.reasoner_client.generate(messages)
             
-            # Handle the response format from Google Gemini
+            # Handle the response format from Google Gemini and NVIDIA
             if isinstance(response, dict) and 'choices' in response:
                 content = response['choices'][0]['message']['content']
-                script_data = json.loads(content)
+                script_data = self._load_json_with_fixes(content, context=f"script draft (segment {segment_num})")
+            elif isinstance(response, dict) and 'content' in response:
+                # NVIDIA NIM format - content may be wrapped in markdown
+                content = response['content']
+                
+                # Extract JSON from markdown code blocks if present
+                if '```json' in content:
+                    # Find JSON block
+                    json_start = content.find('```json') + 7
+                    json_end = content.find('```', json_start)
+                    if json_end != -1:
+                        json_content = content[json_start:json_end].strip()
+                    else:
+                        json_content = content[json_start:].strip()
+                elif '```' in content:
+                    # Generic code block
+                    json_start = content.find('```') + 3
+                    json_end = content.find('```', json_start)
+                    if json_end != -1:
+                        json_content = content[json_start:json_end].strip()
+                    else:
+                        json_content = content[json_start:].strip()
+                else:
+                    json_content = content
+                
+                # Try to fix common JSON issues before parsing
+                json_content = json_content.strip()
+                
+                # Fix common NVIDIA JSON issues
+                if json_content.startswith('```') and not json_content.startswith('```json'):
+                    # Remove any remaining code blocks
+                    json_content = json_content.replace('```', '').strip()
+                
+                # Try to extract just the JSON object if there's extra text
+                if '{' in json_content and '}' in json_content:
+                    start = json_content.find('{')
+                    end = json_content.rfind('}') + 1
+                    json_content = json_content[start:end]
+                
+                script_data = self._load_json_with_fixes(json_content, context=f"script draft (segment {segment_num})")
             elif isinstance(response, str):
-                script_data = json.loads(response)
+                script_data = self._load_json_with_fixes(response, context=f"script draft (segment {segment_num})")
             else:
                 script_data = response
                 
@@ -397,6 +568,8 @@ class SimplifiedPaperTester:
             
         except Exception as e:
             print(f"      ❌ Draft generation failed: {e}")
+            if isinstance(response, dict) and 'content' in response:
+                print(f"      🔍 Raw content: {response['content'][:500]}...")
             return None
     
     async def _factcheck_script(self, script, context, segment):
@@ -418,7 +591,10 @@ class SimplifiedPaperTester:
         4. Accurate citation of results
         
         Rate accuracy from 0.0 to 1.0 and provide feedback.
-        Return JSON format:
+        
+        IMPORTANT: Respond with ONLY valid JSON. No markdown, no explanations, no code blocks. Just the raw JSON object.
+        
+        JSON format:
         {{
             "accuracy": 0.85,
             "needs_rewrite": false,
@@ -430,12 +606,35 @@ class SimplifiedPaperTester:
             messages = [{"role": "user", "content": factcheck_prompt}]
             response = await self.reasoner_client.generate(messages)
             
-            # Handle response format
+            # Handle response format from Google Gemini and NVIDIA
             if isinstance(response, dict) and 'choices' in response:
                 content = response['choices'][0]['message']['content']
-                factcheck_data = json.loads(content)
+                factcheck_data = self._load_json_with_fixes(content, context=f"factcheck (segment {segment.get('title', 'Unknown')})")
+            elif isinstance(response, dict) and 'content' in response:
+                # NVIDIA NIM format - content may be wrapped in markdown
+                content = response['content']
+                
+                # Extract JSON from markdown code blocks if present
+                if '```json' in content:
+                    json_start = content.find('```json') + 7
+                    json_end = content.find('```', json_start)
+                    if json_end != -1:
+                        json_content = content[json_start:json_end].strip()
+                    else:
+                        json_content = content[json_start:].strip()
+                elif '```' in content:
+                    json_start = content.find('```') + 3
+                    json_end = content.find('```', json_start)
+                    if json_end != -1:
+                        json_content = content[json_start:json_end].strip()
+                    else:
+                        json_content = content[json_start:].strip()
+                else:
+                    json_content = content
+                
+                factcheck_data = self._load_json_with_fixes(json_content, context=f"factcheck (segment {segment.get('title', 'Unknown')})")
             elif isinstance(response, str):
-                factcheck_data = json.loads(response)
+                factcheck_data = self._load_json_with_fixes(response, context=f"factcheck (segment {segment.get('title', 'Unknown')})")
             else:
                 factcheck_data = response
             
@@ -466,7 +665,9 @@ class SimplifiedPaperTester:
         
         Source Context: {context}
         
-        Return the improved script in the same JSON format:
+        IMPORTANT: Respond with ONLY valid JSON. No markdown, no explanations, no code blocks. Just the raw JSON object.
+        
+        JSON format:
         {{
             "script": [
                 {{"speaker": "host1", "text": "..."}},
@@ -480,12 +681,35 @@ class SimplifiedPaperTester:
             messages = [{"role": "user", "content": rewrite_prompt}]
             response = await self.reasoner_client.generate(messages)
             
-            # Handle response format
+            # Handle response format from Google Gemini and NVIDIA
             if isinstance(response, dict) and 'choices' in response:
                 content = response['choices'][0]['message']['content']
-                script_data = json.loads(content)
+                script_data = self._load_json_with_fixes(content, context="rewrite script")
+            elif isinstance(response, dict) and 'content' in response:
+                # NVIDIA NIM format - content may be wrapped in markdown
+                content = response['content']
+                
+                # Extract JSON from markdown code blocks if present
+                if '```json' in content:
+                    json_start = content.find('```json') + 7
+                    json_end = content.find('```', json_start)
+                    if json_end != -1:
+                        json_content = content[json_start:json_end].strip()
+                    else:
+                        json_content = content[json_start:].strip()
+                elif '```' in content:
+                    json_start = content.find('```') + 3
+                    json_end = content.find('```', json_start)
+                    if json_end != -1:
+                        json_content = content[json_start:json_end].strip()
+                    else:
+                        json_content = content[json_start:].strip()
+                else:
+                    json_content = content
+                
+                script_data = self._load_json_with_fixes(json_content, context="rewrite script")
             elif isinstance(response, str):
-                script_data = json.loads(response)
+                script_data = self._load_json_with_fixes(response, context="rewrite script")
             else:
                 script_data = response
                 
@@ -502,6 +726,12 @@ class SimplifiedPaperTester:
         print(f"🎭 Using podcast style: {self.podcast_style}")
         
         try:
+            if not self.generate_audio_enabled or not self.audio_producer:
+                print("🔇 Audio generation disabled; skipping TTS and stitching steps")
+                placeholder = self.output_dir / "audio_generation_skipped.txt"
+                placeholder.write_text("Audio generation skipped by configuration.\n")
+                return str(placeholder)
+
             # Prepare episode data
             episode_data = {
                 'episode_id': 'lightendostereo_test',
@@ -563,11 +793,10 @@ class SimplifiedPaperTester:
             
             print(f"📝 Processing {len(script_segments)} dialogue segments preserving AI speaker assignments...")
             
-            # Generate audio preserving original speaker assignments (not overriding with style system)
+            # Generate audio preserving original speaker assignments with natural voices + styles
             audio_file = await self.audio_producer.generate_podcast_audio(
                 script_segments=script_segments,
-                episode_id=f"episode_{episode_data['episode_id']}",
-                use_conversation_flow=True  # Enable style-based conversation
+                episode_id=f"episode_{episode_data['episode_id']}"
             )
             
             if audio_file and os.path.exists(audio_file):
@@ -625,8 +854,13 @@ class SimplifiedPaperTester:
         print("\n📤 Step 9: Export & Final Results")
         print("=" * 70)
         if audio_file:
-            print("✅ COMPLETE SUCCESS: Full workflow pipeline working!")
-            print(f"🎧 Generated podcast: {audio_file}")
+            if self.generate_audio_enabled:
+                print("✅ COMPLETE SUCCESS: Full workflow pipeline working!")
+                print(f"🎧 Generated podcast: {audio_file}")
+            else:
+                print("✅ COMPLETE SUCCESS: Text workflow complete (audio skipped by configuration)")
+                print(f"🗒️ Audio step output: {audio_file}")
+
             print(f"📊 All files saved to: {self.output_dir}")
             print("\n📋 Completed Workflow Steps:")
             print("   ✅ Upload: PDF text extraction")
@@ -635,38 +869,136 @@ class SimplifiedPaperTester:
             print("   ✅ Draft: Script generation per segment")
             print("   ✅ FactCheck: Accuracy verification")
             print("   ✅ Rewrite: Content improvement (if needed)")
-            print("   ✅ TTS: Professional audio synthesis")
-            print("   ✅ Stitch: Episode assembly")
-            print("   ✅ Export: Final MP3 generation")
+
+            if self.generate_audio_enabled:
+                print("   ✅ TTS: Professional audio synthesis")
+                print("   ✅ Stitch: Episode assembly")
+                print("   ✅ Export: Final MP3 generation")
+            else:
+                print("   ⚠️  TTS: Skipped (GENERATE_PODCAST_AUDIO=false)")
+                print("   ⚠️  Stitch: Skipped (GENERATE_PODCAST_AUDIO=false)")
+                print("   ⚠️  Export: Skipped (GENERATE_PODCAST_AUDIO=false)")
         else:
             print("⚠️  PARTIAL SUCCESS: Workflow mostly complete, audio issues")
         
         return bool(audio_file)
 
+async def test_multiple_styles():
+    """Test the system with multiple podcast styles to showcase variety"""
+    print("🎭 COMPREHENSIVE STYLE TESTING")
+    print("=" * 60)
+    
+    # Test all available podcast styles from macOS folder with descriptions
+    test_styles = [
+        ('layperson', 'Friendly, accessible explanations for general audience'),
+        ('classroom', 'Teacher-student dynamic with structured learning approach'),
+        ('tech_interview', 'Technical deep dive with expert analysis and methodology focus'),
+        ('journal_club', 'Academic peer review and critical discussion of research findings'),
+        ('npr_calm', 'Professional, measured NPR-style presentation with thoughtful pacing'),
+        ('news_flash', 'Fast-paced, urgent news bulletin style with breaking research updates'),
+        ('tech_energetic', 'High-energy tech discussion with excitement about innovations'),
+        ('debate_format', 'Opposing viewpoints with spirited disagreement and critical analysis')
+    ]
+    
+    results = {}
+    
+    for style_name, style_description in test_styles:
+        print(f"\n🎭 Testing Style: {style_name.upper()}")
+        print(f"📝 Description: {style_description}")
+        print("-" * 60)
+        
+        try:
+            tester = SimplifiedPaperTester(podcast_style=style_name)
+            success = await tester.run_simplified_test()
+            results[style_name] = success
+            
+            if success:
+                print(f"✅ {style_name} style: SUCCESSFUL")
+            else:
+                print(f"❌ {style_name} style: FAILED")
+                
+        except Exception as e:
+            print(f"❌ {style_name} style error: {e}")
+            results[style_name] = False
+    
+    # Summary
+    print("\n🎯 STYLE TESTING SUMMARY")
+    print("=" * 40)
+    successful_styles = [style for style, success in results.items() if success]
+    failed_styles = [style for style, success in results.items() if not success]
+    
+    print(f"✅ Successful styles ({len(successful_styles)}/{len(test_styles)}):")
+    for style in successful_styles:
+        # Find description for this style
+        style_desc = next((desc for name, desc in test_styles if name == style), "")
+        print(f"   ✓ {style}: {style_desc}")
+    
+    if failed_styles:
+        print(f"❌ Failed styles ({len(failed_styles)}/{len(test_styles)}):")
+        for style in failed_styles:
+            style_desc = next((desc for name, desc in test_styles if name == style), "")
+            print(f"   ✗ {style}: {style_desc}")
+    
+    if len(successful_styles) == len(test_styles):
+        print(f"\n🎉 ALL {len(test_styles)} PODCAST STYLES WORKING PERFECTLY!")
+        print("🏆 Complete NVIDIA NIM integration with full style variety!")
+    else:
+        print(f"\n⚠️  ISSUES: {len(failed_styles)} styles need attention")
+    
+    return len(successful_styles) > 0
+
 async def main():
-    """Main test function with podcast style selection"""
+    """Main test function with podcast style selection and NVIDIA integration"""
     import argparse
     
     # Parse command line arguments for style selection
-    parser = argparse.ArgumentParser(description='Test PDF paper processing with podcast styles')
+    parser = argparse.ArgumentParser(description='Test PDF paper processing with NVIDIA NIMs and podcast styles')
     parser.add_argument('--style', 
-                       choices=['layperson', 'classroom', 'tech_interview', 'journal_club', 'npr_calm', 'news_flash', 'tech_energetic', 'investigative', 'debate_format'],
+                       choices=['layperson', 'classroom', 'tech_interview', 'journal_club', 'npr_calm', 'news_flash', 'tech_energetic', 'debate_format'],
                        default='layperson',
                        help='Choose podcast conversation style (default: layperson)')
+    parser.add_argument('--test-multiple', 
+                       action='store_true',
+                       help='Test multiple podcast styles to showcase variety')
+    parser.add_argument('--nvidia-only',
+                       action='store_true', 
+                       help='Force use of NVIDIA NIMs only (hackathon mode)')
     
     # Parse known args (ignore unknown ones for compatibility)
     args, _ = parser.parse_known_args()
     
-    print(f"🎙️ Selected podcast style: {args.style}")
+    # Set hackathon environment if requested
+    if args.nvidia_only:
+        print("🏆 NVIDIA-ONLY MODE: Using NVIDIA Llama + Embedding NIMs")
+        os.environ['HACKATHON_MODE'] = 'true'
+        os.environ['USE_NVIDIA_NIM'] = 'true'
+        os.environ['USE_GOOGLE_LLM'] = 'false'
     
     try:
-        tester = SimplifiedPaperTester(podcast_style=args.style)
-        success = await tester.run_simplified_test()
+        if args.test_multiple:
+            print("� TESTING MULTIPLE PODCAST STYLES WITH NVIDIA INTEGRATION")
+            success = await test_multiple_styles()
+        else:
+            print(f"�🎙️ Selected podcast style: {args.style}")
+            if args.nvidia_only:
+                print("🏆 Using NVIDIA Llama-3.1-Nemotron-Nano-8B-v1 + nv-embedqa-e5-v5")
+            
+            tester = SimplifiedPaperTester(podcast_style=args.style)
+            success = await tester.run_simplified_test()
         
         if success:
             print("\n🎉 SUCCESS: Your PDF paper pipeline is working with podcast styles!")
-            print(f"🎭 Used conversation style: {args.style}")
-            print("💡 Try different styles with: --style tech_interview, --style academic_discussion, etc.")
+            if not args.test_multiple:
+                print(f"🎭 Used conversation style: {args.style}")
+            if args.nvidia_only:
+                print("🏆 NVIDIA NIMs integration: WORKING")
+            print("\n💡 Available style options:")
+            print("   --style layperson (friendly, accessible)")
+            print("   --style debate_format (opposing viewpoints)")
+            print("   --style tech_interview (technical deep dive)")
+            print("   --style journal_club (academic discussion)")
+            print("   --test-multiple (test 3 different styles)")
+            print("   --nvidia-only (force NVIDIA NIMs only)")
         else:
             print("\n⚠️  ISSUES: Some components need attention")
             

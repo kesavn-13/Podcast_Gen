@@ -49,8 +49,13 @@ class PodcastAgentOrchestrator:
         # Initialize RAG system
         self.retrieval = RetrievalInterface(use_local=True)
         
-        # Initialize audio producer
-        self.audio_producer = create_audio_producer(use_aws=False)
+        # Initialize audio producer with natural voices and conversation styles
+        self.audio_producer = create_audio_producer(
+            use_aws=False, 
+            use_real_tts=True,
+            podcast_style="layperson",  # Default conversational style
+            use_natural_voices=True     # Enable Google TTS + enhanced pyttsx3
+        )
         
         # Episode state
         self.episodes = {}

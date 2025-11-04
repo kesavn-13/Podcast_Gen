@@ -286,10 +286,11 @@ class MockEmbeddingClient:
 def create_clients(use_mock: bool = None) -> tuple:
     """
     Create reasoning and embedding clients with priority order:
-    1. Google Gemini API (if configured)
-    2. Local LLM via Ollama (if configured) 
-    3. Mock clients (for development)
-    4. Real SageMaker NIM clients (for production)
+    1. NVIDIA NIM Llama-3.1-Nemotron-Nano-8B-v1 (HACKATHON PRIORITY)
+    2. Google Gemini API (if configured and not in hackathon mode)
+    3. Local LLM via Ollama (if configured) 
+    4. Mock clients (for development)
+    5. Real SageMaker NIM clients (for production)
     
     Args:
         use_mock: Override for mock usage (defaults to env setting)
@@ -297,11 +298,33 @@ def create_clients(use_mock: bool = None) -> tuple:
     Returns:
         Tuple of (reasoner_client, embedding_client)
     """
-    # Priority 1: Google Gemini API
-    google_api_key = os.getenv('GOOGLE_API_KEY')
-    use_google = os.getenv('USE_GOOGLE_LLM', 'true').lower() == 'true'
+    # Priority 1: NVIDIA NIM for Hackathon Compliance
+    nvidia_api_key = os.getenv('NVIDIA_API_KEY')
+    use_nvidia = os.getenv('USE_NVIDIA_NIM', 'true').lower() == 'true'
+    hackathon_mode = os.getenv('HACKATHON_MODE', 'true').lower() == 'true'
     
-    if google_api_key and use_google and google_api_key != 'your-google-api-key-here':
+    if use_nvidia and hackathon_mode and nvidia_api_key:
+        try:
+            # Import NVIDIA clients
+            from backend.tools.nvidia_llm_client import NVIDIALlamaClient
+            from backend.tools.nvidia_embedding_client import NVIDIAEmbeddingClient
+            
+            # Create NVIDIA NIM clients with both LLM and Embedding
+            reasoning_client = NVIDIALlamaClient(nvidia_api_key)
+            embedding_client = NVIDIAEmbeddingClient(nvidia_api_key)
+            
+            print("🏆 Using NVIDIA Llama-3.1-Nemotron-Nano-8B-v1 + nv-embedqa-e5-v5 (HACKATHON COMPLIANT)")
+            return reasoning_client, embedding_client
+        except ImportError as e:
+            print(f"⚠️  NVIDIA NIM not available ({e}), trying alternatives...")
+        except Exception as e:
+            print(f"⚠️  NVIDIA NIM initialization failed ({e}), trying alternatives...")
+    
+    # Priority 2: Google Gemini API (only if not in hackathon mode)
+    google_api_key = os.getenv('GOOGLE_API_KEY')
+    use_google = os.getenv('USE_GOOGLE_LLM', 'false' if hackathon_mode else 'true').lower() == 'true'
+    
+    if google_api_key and use_google and google_api_key != 'your-google-api-key-here' and not hackathon_mode:
         try:
             from backend.tools.google_llm_client import GoogleGeminiClient
             reasoning_client = GoogleGeminiClient(api_key=google_api_key)
@@ -322,9 +345,9 @@ def create_clients(use_mock: bool = None) -> tuple:
         except Exception as e:
             print(f"⚠️  Google LLM initialization failed ({e}), trying alternatives...")
     
-    # Priority 2: Local LLM (Ollama)
+    # Priority 3: Local LLM (Ollama)
     use_local = os.getenv('USE_LOCAL_LLM', 'false').lower() == 'true'
-    if use_local:
+    if use_local and not hackathon_mode:
         try:
             from backend.tools.local_llm_client import create_local_clients
             reasoning_client, embedding_client = create_local_clients()

@@ -14,9 +14,11 @@ import json
 import logging
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 # Add project root to path
@@ -24,6 +26,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.test_end_to_end import PodcastAgentOrchestrator
+
+# Templates setup
+templates = Jinja2Templates(directory="app/templates")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

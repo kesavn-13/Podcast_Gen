@@ -6,15 +6,18 @@ Simplified version for immediate testing and demo
 import os
 import asyncio
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import json
 import logging
 from datetime import datetime
+from io import BytesIO
 
 try:
-    from fastapi import FastAPI, HTTPException, UploadFile, File
+    from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import FileResponse, JSONResponse
+    from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.templating import Jinja2Templates
     from pydantic import BaseModel
     FASTAPI_AVAILABLE = True
 except ImportError:
@@ -31,6 +34,12 @@ if FASTAPI_AVAILABLE:
     except ImportError:
         print("⚠️  Could not import PodcastAgentOrchestrator")
         PodcastAgentOrchestrator = None
+
+try:
+    from PyPDF2 import PdfReader
+except ImportError:
+    PdfReader = None
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -65,6 +74,54 @@ if FASTAPI_AVAILABLE:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+    static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    def _extract_text_from_upload(filename: str, raw_bytes: bytes) -> str:
+        """Convert uploaded content to UTF-8 text, with PDF support."""
+
+        if not raw_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+        lower_name = (filename or "").lower()
+        if lower_name.endswith(".pdf") or lower_name.endswith(".x-pdf") or lower_name.endswith(".pdfx"):
+            if PdfReader is None:
+                raise HTTPException(status_code=500, detail="PDF support not installed. Install PyPDF2.")
+            try:
+                reader = PdfReader(BytesIO(raw_bytes))
+                pages = [(page.extract_text() or "") for page in reader.pages]
+                text = "\n".join(pages).strip()
+                if not text:
+                    raise ValueError("No text extracted from PDF")
+                return text
+            except Exception as exc:  # pragma: no cover - depends on PDF contents
+                logger.error("PDF extraction failed: %s", exc)
+                raise HTTPException(status_code=400, detail="Unable to extract text from the provided PDF")
+
+        try:
+            return raw_bytes.decode("utf-8", errors="ignore")
+        except Exception as exc:  # pragma: no cover - unexpected encodings
+            logger.error("Text decode failed: %s", exc)
+            raise HTTPException(status_code=400, detail="Unable to decode uploaded file as text")
+
+    async def _persist_upload(upload: UploadFile) -> Tuple[str, Path, str]:
+        """Save the uploaded file to disk and return metadata."""
+
+        content = await upload.read()
+        text_content = _extract_text_from_upload(upload.filename or "document", content)
+
+        paper_id = f"paper_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        file_path = Path("temp/uploads") / f"{paper_id}.txt"
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(text_content, encoding="utf-8")
+
+        title = text_content.splitlines()[0][:100] if text_content else (upload.filename or paper_id)
+        logger.info("📄 Uploaded paper saved: %s - %s", paper_id, title)
+        return paper_id, file_path, title
 
     @app.on_event("startup")
     async def startup_event():
@@ -120,34 +177,54 @@ if FASTAPI_AVAILABLE:
             "orchestrator": "available" if orchestrator else "unavailable"
         }
 
+    @app.get("/ui", response_class=HTMLResponse)
+    async def serve_ui(request: Request):
+        """Serve the interactive web UI template."""
+        return templates.TemplateResponse("index.html", {"request": request})
+
     @app.post("/upload", response_model=PaperUploadResponse)
     async def upload_paper(file: UploadFile = File(...)):
-        """Upload and process a research paper"""
+        """Upload and store a research paper for later processing."""
         try:
-            # Save uploaded file
-            paper_id = f"paper_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            file_path = Path(f"temp/uploads/{paper_id}.txt")
-            
-            content = await file.read()
-            with open(file_path, 'wb') as f:
-                f.write(content)
-            
-            # Extract title from content
-            text_content = content.decode('utf-8', errors='ignore')
-            title = text_content.split('\n')[0][:100] if text_content else file.filename
-            
-            logger.info(f"📄 Uploaded paper: {paper_id} - {title}")
-            
+            paper_id, _, title = await _persist_upload(file)
             return PaperUploadResponse(
                 paper_id=paper_id,
                 title=title,
                 status="uploaded",
                 message="Paper uploaded successfully"
             )
-            
-        except Exception as e:
-            logger.error(f"❌ Upload failed: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception as exc:  # pragma: no cover - unexpected errors
+            logger.error("Upload failed: %s", exc)
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @app.post("/agentic-workflow")
+    async def agentic_workflow(
+        file: UploadFile = File(...),
+        style: str = Form("conversational"),
+        duration: str = Form("medium")
+    ):
+        """End-to-end workflow used by the web UI form."""
+
+        if orchestrator is None:
+            raise HTTPException(status_code=503, detail="Agent orchestrator not available")
+
+        paper_id, saved_path, title = await _persist_upload(file)
+
+        try:
+            result = await orchestrator.process_paper(paper_id, str(saved_path))
+        except Exception as exc:  # pragma: no cover
+            logger.error("Workflow execution failed: %s", exc)
+            raise HTTPException(status_code=500, detail="Failed to process the paper. Check server logs for details.")
+
+        return {
+            "paper_id": paper_id,
+            "title": title,
+            "style": style,
+            "duration": duration,
+            "result": result,
+        }
 
     @app.post("/index/{paper_id}")
     async def index_paper(paper_id: str):

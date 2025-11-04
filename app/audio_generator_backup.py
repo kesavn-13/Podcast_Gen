@@ -1067,15 +1067,12 @@ class AWSPollyEngine:
         return ssml
 
 
-# Compatibility aliases for existing code (defined before usage)
-# RealTTSEngine = RealTTSEngine  # Already defined above
-
 class PodcastAudioProducer:
     """Main class for producing podcast audio with humanized conversation styles"""
     
-    def __init__(self, use_natural_voices: bool = True, podcast_style: str = None,
-                 use_aws: bool = False, use_real_tts: bool = True, 
-                 conversation_style: str = "layperson"):
+    def __init__(self, use_aws: bool = False, use_real_tts: bool = True, 
+                 conversation_style: str = "layperson", use_natural_voices: bool = True,
+                 podcast_style: str = None):
         """
         Initialize PodcastAudioProducer with natural voices and conversation styles
         
@@ -1226,20 +1223,17 @@ class PodcastAudioProducer:
         """Combine multiple audio files into single podcast"""
         output_path = self.output_dir / f"{episode_id}_final.mp3"
         
-        ffmpeg_available = await self._check_ffmpeg()
-
-        if ffmpeg_available:
-            try:
-                await self._combine_with_ffmpeg(audio_files, output_path)
-                return str(output_path)
-            except Exception as exc:
-                logger.warning(f"⚠️ ffmpeg concat failed ({exc}); falling back to numpy-based combiner")
-
         try:
-            await self._combine_mock_files(audio_files, output_path)
+            # Try using ffmpeg for proper audio concatenation
+            if await self._check_ffmpeg():
+                await self._combine_with_ffmpeg(audio_files, output_path)
+            else:
+                await self._combine_mock_files(audio_files, output_path)
+            
             return str(output_path)
+            
         except Exception as e:
-            logger.error(f"❌ Audio combination failed even after fallback: {e}")
+            logger.error(f"❌ Audio combination failed: {e}")
             return None
     
     async def _check_ffmpeg(self) -> bool:
@@ -1277,11 +1271,7 @@ class PodcastAudioProducer:
                 stderr=asyncio.subprocess.PIPE
             )
             
-            stdout, stderr = await process.communicate()
-            if process.returncode != 0:
-                err_output = (stderr or b"").decode(errors="ignore").strip()
-                logger.error(f"ffmpeg concat error (code {process.returncode}): {err_output}")
-                raise RuntimeError(f"ffmpeg concat failed with code {process.returncode}")
+            await process.communicate()
             
         finally:
             # Clean up temporary file
@@ -1342,7 +1332,7 @@ class PodcastAudioProducer:
             import wave
             
             # Read and combine all WAV files
-            segment_arrays = []
+            combined_audio = []
             sample_rate = 22050
             
             logger.info(f"🔗 Combining {len(wav_files)} WAV files...")
@@ -1353,21 +1343,21 @@ class PodcastAudioProducer:
                         with wave.open(wav_file, 'rb') as wav:
                             frames = wav.readframes(wav.getnframes())
                             audio_data = np.frombuffer(frames, dtype=np.int16)
-                            segment_arrays.append(audio_data)
+                            combined_audio.extend(audio_data)
                             logger.info(f"   ✅ Added {wav_file} ({len(audio_data)} samples)")
                             
                             # Add small silence between segments (0.5 seconds)
                             silence = np.zeros(int(0.5 * sample_rate), dtype=np.int16)
-                            segment_arrays.append(silence)
+                            combined_audio.extend(silence)
                     else:
                         logger.warning(f"   ⚠️ Skipping empty/missing file: {wav_file}")
                         
                 except Exception as e:
                     logger.warning(f"   ❌ Failed to read {wav_file}: {e}")
             
-            if segment_arrays:
-                # Concatenate arrays to keep memory use compact
-                combined_array = np.concatenate(segment_arrays)
+            if combined_audio:
+                # Convert to numpy array
+                combined_array = np.array(combined_audio, dtype=np.int16)
                 logger.info(f"🎵 Combined audio: {len(combined_array)} samples ({len(combined_array)/sample_rate:.1f}s)")
                 
                 # Create combined WAV file first (always works)
@@ -1517,12 +1507,6 @@ async def demo_audio_generation():
         print(f"✅ Mock podcast generated: {audio_path}")
     else:
         print("❌ Audio generation failed")
-
-
-# Factory function for easy use
-def create_audio_producer(use_natural_voices: bool = True, podcast_style: str = None) -> PodcastAudioProducer:
-    """Create audio producer - Windows compatible version"""
-    return PodcastAudioProducer(use_natural_voices=use_natural_voices, podcast_style=podcast_style)
 
 
 if __name__ == "__main__":
