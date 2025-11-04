@@ -1225,6 +1225,35 @@ class PodcastAudioProducer:
     async def _combine_audio_segments(self, audio_files: List[str], episode_id: str) -> str:
         """Combine multiple audio files into single podcast"""
         output_path = self.output_dir / f"{episode_id}_final.mp3"
+
+        # Prefer absolute paths to avoid ffmpeg concat resolving relative to /tmp
+        normalized_files: List[str] = []
+        for audio_file in audio_files:
+            if not audio_file:
+                continue
+
+            candidate = Path(audio_file)
+
+            # Prefer the high-quality combined WAV if it exists next to the mp3
+            combined_wav = candidate.with_suffix('.combined.wav')
+            if candidate.suffix != '.wav' and combined_wav.exists():
+                candidate = combined_wav
+
+            if not candidate.exists():
+                logger.warning(f"⚠️ Skipping missing audio file during combine: {candidate}")
+                continue
+
+            try:
+                candidate_path = candidate.resolve()
+            except Exception:
+                candidate_path = candidate
+
+            normalized_files.append(str(candidate_path))
+
+        if not normalized_files:
+            raise RuntimeError("No audio files available to combine")
+
+        audio_files = normalized_files
         
         ffmpeg_available = await self._check_ffmpeg()
 
@@ -1241,6 +1270,13 @@ class PodcastAudioProducer:
         except Exception as e:
             logger.error(f"❌ Audio combination failed even after fallback: {e}")
             return None
+
+    async def combine_episode_tracks(self, episode_id: str, segment_audio_files: List[str]) -> Optional[str]:
+        """Public helper to stitch multiple segment recordings into one episode."""
+        if not segment_audio_files:
+            return None
+
+        return await self._combine_audio_segments(segment_audio_files, episode_id)
     
     async def _check_ffmpeg(self) -> bool:
         """Check if ffmpeg is available"""
@@ -1293,6 +1329,7 @@ class PodcastAudioProducer:
             "episode_type": "combined_podcast", 
             "segments": [],
             "total_duration": 0,
+            "factuality_summary": [],
             "note": "Combined audio from individual WAV segments"
         }
         
@@ -1314,8 +1351,17 @@ class PodcastAudioProducer:
                         segment_data = json.load(f)
                         combined_metadata["segments"].append(segment_data)
                         total_duration += segment_data.get("estimated_duration", 3.0)
-                except:
-                    pass
+
+                        score = segment_data.get("factcheck_score")
+                        feedback = segment_data.get("factcheck_feedback")
+                        if score is not None or feedback:
+                            combined_metadata["factuality_summary"].append({
+                                "segment_title": segment_data.get("title"),
+                                "factcheck_score": score,
+                                "feedback": feedback
+                            })
+                except Exception as exc:
+                    logger.debug(f"Failed to read segment metadata for combine summary: {exc}")
         
         combined_metadata["total_duration"] = total_duration
         
@@ -1517,12 +1563,6 @@ async def demo_audio_generation():
         print(f"✅ Mock podcast generated: {audio_path}")
     else:
         print("❌ Audio generation failed")
-
-
-# Factory function for easy use
-def create_audio_producer(use_natural_voices: bool = True, podcast_style: str = None) -> PodcastAudioProducer:
-    """Create audio producer - Windows compatible version"""
-    return PodcastAudioProducer(use_natural_voices=use_natural_voices, podcast_style=podcast_style)
 
 
 if __name__ == "__main__":

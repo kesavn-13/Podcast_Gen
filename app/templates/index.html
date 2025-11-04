@@ -305,14 +305,15 @@
                 <div class="option-group">
                     <h3>Podcast Style</h3>
                     <select id="podcastStyle">
-                        <option value="conversational">Conversational Discussion</option>
-                        <option value="technical">Technical Deep Dive</option>
-                        <option value="accessible">Accessible Overview</option>
-                        <option value="interview">Interview Format</option>
-                        <option value="debate">Critical Analysis</option>
-                        <option value="educational">Educational Breakdown</option>
-                        <option value="summary">Executive Summary</option>
-                        <option value="storytelling">Narrative Storytelling</option>
+                        <option value="layperson" selected>Layperson-Friendly (General Audience)</option>
+                        <option value="classroom">Classroom Teaching (Educational)</option>
+                        <option value="tech_interview">Tech Deep Dive (Expert Analysis)</option>
+                        <option value="journal_club">Journal Club (Academic Review)</option>
+                        <option value="npr_calm">NPR Calm (Thoughtful Storytelling)</option>
+                        <option value="news_flash">News Flash (Breaking Research)</option>
+                        <option value="tech_energetic">Tech Energetic (High-Energy Tech Talk)</option>
+                        <option value="investigative">Investigative (Skeptical Analysis)</option>
+                        <option value="debate_format">Debate Format (Balanced Perspectives)</option>
                     </select>
                 </div>
                 
@@ -353,34 +354,34 @@
     <script>
         let selectedFile = null;
         let jobId = null;
-        
-        // File upload handling
+        let pollInterval = null;
+
         const fileInput = document.getElementById('fileInput');
         const uploadSection = document.getElementById('uploadSection');
         const fileInfo = document.getElementById('fileInfo');
         const generateBtn = document.getElementById('generateBtn');
-        
+
         fileInput.addEventListener('change', handleFileSelect);
-        
+
         // Drag and drop functionality
         uploadSection.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadSection.classList.add('dragover');
         });
-        
+
         uploadSection.addEventListener('dragleave', () => {
             uploadSection.classList.remove('dragover');
         });
-        
+
         uploadSection.addEventListener('drop', (e) => {
             e.preventDefault();
             uploadSection.classList.remove('dragover');
             const files = e.dataTransfer.files;
             if (files.length > 0 && files[0].type === 'application/pdf') {
-                handleFileSelect({ target: { files: files } });
+                handleFileSelect({ target: { files } });
             }
         });
-        
+
         function handleFileSelect(event) {
             const file = event.target.files[0];
             if (file && file.type === 'application/pdf') {
@@ -393,206 +394,212 @@
                 `;
                 fileInfo.style.display = 'block';
                 generateBtn.disabled = false;
-                
                 showStatus('File selected successfully!', 'success');
             } else {
                 showStatus('Please select a valid PDF file.', 'error');
             }
         }
-        
+
         function showStatus(message, type = 'info') {
             const statusDiv = document.createElement('div');
             statusDiv.className = `status-message status-${type}`;
             statusDiv.textContent = message;
-            
-            // Insert after upload section
-            const uploadSection = document.getElementById('uploadSection');
+
             const existing = uploadSection.nextElementSibling;
             if (existing && existing.classList.contains('status-message')) {
                 existing.remove();
             }
             uploadSection.parentNode.insertBefore(statusDiv, uploadSection.nextSibling);
-            
-            // Remove after 5 seconds
+
             setTimeout(() => {
                 if (statusDiv.parentNode) {
                     statusDiv.remove();
                 }
             }, 5000);
         }
-        
+
         async function generatePodcast() {
             if (!selectedFile) {
                 showStatus('Please select a PDF file first.', 'error');
                 return;
             }
-            
-            // Hide upload section and show progress
-            document.getElementById('uploadSection').style.display = 'none';
-            document.querySelector('.options-section').style.display = 'none';
-            document.getElementById('generateBtn').style.display = 'none';
-            document.getElementById('progressSection').style.display = 'block';
-            
+
+            prepareForProcessing();
+
             try {
-                // Create FormData for file upload
                 const formData = new FormData();
                 formData.append('file', selectedFile);
                 formData.append('style', document.getElementById('podcastStyle').value);
                 formData.append('duration', document.getElementById('duration').value);
-                
-                // Start the generation process
-                updateProgress(10, 'Uploading research paper...');
-                
+
                 const response = await fetch('/agentic-workflow', {
                     method: 'POST',
                     body: formData
                 });
-                
-                if (response.ok) {
-                    const result = await response.json();
-                    jobId = result.job_id || result.id || 'generating';
-                    
-                    // Start polling for progress
-                    pollProgress();
-                } else {
+
+                if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${await response.text()}`);
                 }
-                
+
+                const result = await response.json();
+                jobId = result.job_id;
+                updateProgress(result.progress ?? 0, 'Job queued...');
+                startPolling();
             } catch (error) {
                 console.error('Generation error:', error);
                 showGenerationError('Failed to start podcast generation: ' + error.message);
             }
         }
-        
-        function updateProgress(percentage, message) {
-            document.getElementById('progressFill').style.width = percentage + '%';
-            document.getElementById('progressText').textContent = message;
+
+        function prepareForProcessing() {
+            document.getElementById('uploadSection').style.display = 'none';
+            document.querySelector('.options-section').style.display = 'none';
+            document.getElementById('generateBtn').style.display = 'none';
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('statusMessages').innerHTML = '';
+            updateProgress(0, 'Initializing AI workflow...');
         }
-        
-        function addStatusMessage(message, type = 'info') {
-            const statusMessages = document.getElementById('statusMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `status-message status-${type}`;
-            messageDiv.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
-            statusMessages.appendChild(messageDiv);
-            statusMessages.scrollTop = statusMessages.scrollHeight;
+
+        function startPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+            }
+            pollInterval = setInterval(fetchStatusUpdate, 5000);
+            fetchStatusUpdate();
         }
-        
-        async function pollProgress() {
-            let progress = 20;
-            const steps = [
-                'Processing PDF content...',
-                'Analyzing research structure...',
-                'Generating conversation script...',
-                'Fact-checking content...',
-                'Creating audio synthesis...',
-                'Finalizing podcast episode...'
-            ];
-            
-            let stepIndex = 0;
-            
-            const pollInterval = setInterval(async () => {
-                try {
-                    // Simulate progress updates
-                    if (stepIndex < steps.length) {
-                        progress = 20 + (stepIndex / steps.length) * 70;
-                        updateProgress(progress, steps[stepIndex]);
-                        addStatusMessage(steps[stepIndex]);
-                        stepIndex++;
-                    }
-                    
-                    // Check if job is complete (simulate 6-8 minutes total)
-                    if (progress >= 90) {
-                        clearInterval(pollInterval);
-                        
-                        // Simulate completion
-                        updateProgress(100, 'Podcast generation complete!');
-                        addStatusMessage('Generation completed successfully!', 'success');
-                        
-                        setTimeout(() => {
-                            showResults();
-                        }, 2000);
-                    }
-                    
-                } catch (error) {
-                    clearInterval(pollInterval);
-                    showGenerationError('Error checking progress: ' + error.message);
+
+        async function fetchStatusUpdate() {
+            if (!jobId) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/status/${jobId}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
                 }
-            }, 8000); // Update every 8 seconds
-        }
-        
-        function showResults() {
-            document.getElementById('progressSection').style.display = 'none';
-            document.getElementById('resultsSection').style.display = 'block';
-            
-            // Create download cards
-            const downloadCards = document.getElementById('downloadCards');
-            downloadCards.innerHTML = `
-                <div class="download-card">
-                    <h4>🎧 Complete Podcast Episode</h4>
-                    <p>Full research paper podcast with professional hosts Dr. Sarah Chen and Dr. Alex Rivera</p>
-                    <p><strong>Duration:</strong> ~15 minutes | <strong>Format:</strong> MP3 | <strong>Quality:</strong> High (320kbps)</p>
-                    <a href="#" class="download-btn" onclick="downloadFile('podcast')">Download MP3</a>
-                </div>
-                
-                <div class="download-card">
-                    <h4>📝 Full Transcript</h4>
-                    <p>Complete text transcript with timestamps and speaker identification</p>
-                    <p><strong>Format:</strong> PDF | <strong>Citations:</strong> Included</p>
-                    <a href="#" class="download-btn" onclick="downloadFile('transcript')">Download Transcript</a>
-                </div>
-                
-                <div class="download-card">
-                    <h4>📊 Processing Report</h4>
-                    <p>Detailed analysis report including fact-checking scores and source verification</p>
-                    <p><strong>Format:</strong> JSON | <strong>Accuracy Score:</strong> 96.8%</p>
-                    <a href="#" class="download-btn" onclick="downloadFile('report')">Download Report</a>
-                </div>
-            `;
-        }
-        
-        function downloadFile(type) {
-            // In a real implementation, these would be actual download links from the API
-            const filename = selectedFile ? selectedFile.name.replace('.pdf', '') : 'research_paper';
-            
-            let url, downloadName;
-            switch(type) {
-                case 'podcast':
-                    // This would be the actual podcast file URL from your API
-                    downloadName = `${filename}_podcast.mp3`;
-                    showStatus(`Preparing ${downloadName} for download...`, 'info');
-                    // Simulate download preparation
-                    setTimeout(() => {
-                        showStatus(`${downloadName} ready! Check your downloads folder.`, 'success');
-                    }, 2000);
-                    break;
-                case 'transcript':
-                    downloadName = `${filename}_transcript.pdf`;
-                    showStatus(`Preparing ${downloadName} for download...`, 'info');
-                    setTimeout(() => {
-                        showStatus(`${downloadName} ready! Check your downloads folder.`, 'success');
-                    }, 1500);
-                    break;
-                case 'report':
-                    downloadName = `${filename}_report.json`;
-                    showStatus(`Preparing ${downloadName} for download...`, 'info');
-                    setTimeout(() => {
-                        showStatus(`${downloadName} ready! Check your downloads folder.`, 'success');
-                    }, 1000);
-                    break;
+
+                const status = await response.json();
+                updateFromStatus(status);
+            } catch (error) {
+                console.error('Status polling error:', error);
+                showGenerationError('Error checking progress: ' + error.message);
             }
         }
-        
-        function showGenerationError(message) {
+
+        function updateFromStatus(status) {
+            const progressValue = status.progress ?? 0;
+            const latestMessage = (status.messages && status.messages.length > 0)
+                ? status.messages[status.messages.length - 1].message
+                : `Status: ${status.status}`;
+
+            updateProgress(progressValue, latestMessage);
+            renderStatusMessages(status.messages || []);
+
+            if (status.status === 'completed') {
+                clearInterval(pollInterval);
+                showResults(status.outputs || {}, status);
+            } else if (status.status === 'failed') {
+                clearInterval(pollInterval);
+                showGenerationError(status.error || 'Podcast generation failed.');
+            }
+        }
+
+        function updateProgress(percentage, message) {
+            document.getElementById('progressFill').style.width = `${percentage}%`;
+            if (message) {
+                document.getElementById('progressText').textContent = message;
+            }
+        }
+
+        function renderStatusMessages(messages) {
+            const statusMessages = document.getElementById('statusMessages');
+            statusMessages.innerHTML = '';
+
+            messages.slice(-12).forEach((msg) => {
+                const div = document.createElement('div');
+                const level = msg.level || 'info';
+                div.className = `status-message status-${level}`;
+                const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+                div.textContent = `${timestamp}: ${msg.message}`;
+                statusMessages.appendChild(div);
+            });
+
+            statusMessages.scrollTop = statusMessages.scrollHeight;
+        }
+
+        function showResults(outputs, metadata) {
             document.getElementById('progressSection').style.display = 'none';
-            showStatus(message, 'error');
-            
-            // Show reset button
-            const resetBtn = document.createElement('button');
-            resetBtn.className = 'upload-btn';
-            resetBtn.textContent = 'Try Again';
-            resetBtn.onclick = () => location.reload();
-            document.querySelector('.main-content').appendChild(resetBtn);
+            const resultsSection = document.getElementById('resultsSection');
+            const downloadCards = document.getElementById('downloadCards');
+
+            resultsSection.style.display = 'block';
+
+            const cards = [];
+            const jobKey = metadata.job_id || jobId;
+
+            if (outputs.audio) {
+                cards.push(`
+                    <div class="download-card">
+                        <h4>🎧 Complete Podcast Episode</h4>
+                        <p>Download the fully produced podcast episode generated from your research paper.</p>
+                        <p><strong>Format:</strong> MP3 | <strong>Source:</strong> NVIDIA NIM powered workflow</p>
+                        <a href="/download/${jobKey}/audio" class="download-btn">Download MP3</a>
+                    </div>
+                `);
+            }
+
+            if (outputs.transcript) {
+                cards.push(`
+                    <div class="download-card">
+                        <h4>📝 Full Transcript</h4>
+                        <p>Review the fact-checked conversation transcript with speaker tags and citations.</p>
+                        <p><strong>Format:</strong> TXT | <strong>Segments:</strong> ${metadata.segment_count || 'multi-segment'}</p>
+                        <a href="/download/${jobKey}/transcript" class="download-btn">Download Transcript</a>
+                    </div>
+                `);
+            }
+
+            if (outputs.report) {
+                cards.push(`
+                    <div class="download-card">
+                        <h4>📊 Processing Report</h4>
+                        <p>Inspect factuality scores, segment durations, and resource usage for this job.</p>
+                        <p><strong>Format:</strong> JSON | <strong>Status:</strong> ${metadata.status}</p>
+                        <a href="/download/${jobKey}/report" class="download-btn">Download Report</a>
+                    </div>
+                `);
+            }
+
+            if (cards.length === 0) {
+                cards.push(`<div class="status-message status-info">No downloadable assets were generated.</div>`);
+            }
+
+            downloadCards.innerHTML = cards.join('\n');
+        }
+
+        function showGenerationError(message) {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+            }
+
+            document.getElementById('progressSection').style.display = 'none';
+            const resultsSection = document.getElementById('resultsSection');
+            const downloadCards = document.getElementById('downloadCards');
+
+            resultsSection.style.display = 'block';
+            downloadCards.innerHTML = `<div class="status-message status-error">${message}</div>`;
+
+            let resetBtn = document.getElementById('resetWorkflowBtn');
+            if (!resetBtn) {
+                resetBtn = document.createElement('button');
+                resetBtn.id = 'resetWorkflowBtn';
+                resetBtn.className = 'upload-btn';
+                resetBtn.textContent = 'Start Over';
+                resetBtn.onclick = () => window.location.reload();
+                document.querySelector('.main-content').appendChild(resetBtn);
+            }
         }
     </script>
 </body>

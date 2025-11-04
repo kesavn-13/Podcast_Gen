@@ -375,10 +375,21 @@ Generate 4-6 exchanges between host1 and host2."""
         
         if not audio_files:
             return None
-        
-        # For now, return the first audio file as placeholder
-        # In production, this would stitch all segments together
-        return audio_files[0] if audio_files else None
+
+        episode_id = f"{paper_id}_episode"
+
+        try:
+            combined_path = await self.audio_producer.combine_episode_tracks(
+                episode_id, audio_files
+            )
+            if combined_path:
+                return combined_path
+        except AttributeError:
+            logger.warning("🎧 Audio producer missing combine helper, falling back to first segment")
+        except Exception as exc:
+            logger.warning(f"🎧 Episode combination failed ({exc}), using first segment as fallback")
+
+        return audio_files[0]
     
     def _calculate_factuality(self, segments: List[Dict[str, Any]]) -> float:
         """Calculate overall factuality score"""

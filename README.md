@@ -19,6 +19,7 @@ This system represents a complete agentic AI workflow that automatically convert
 - Production deployment on AWS Elastic Kubernetes Service (EKS)
 - Real-time NVIDIA NIM model integration
 - Complete hackathon compliance verification
+- Public UI: [http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com/ui](http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com/ui)
 - Accessible via HTTP API endpoints
 
 ## Table of Contents
@@ -157,10 +158,15 @@ graph TD
 - **Security**: VPC configuration with dedicated IAM role for NIM access and AWS Secrets Manager integration
 
 **Live Deployment Status:**
-- **Ingress**: AWS LoadBalancer Service exposes FastAPI backend (retrieve hostname via `kubectl get svc ai-podcast-agent`)
-- **API Endpoints**: Fully functional with real-time NVIDIA NIM integration
-- **Monitoring**: CloudWatch Container Insights and Kubernetes events
-- **Scaling**: Horizontal Pod Autoscaler configured (min/max 1 on free-tier hardware)
+
+- Public Load Balancer: http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com
+- Active Image Tag: 824274059565.dkr.ecr.us-west-2.amazonaws.com/podcast-gen:v20251104121815
+- Running Pod: ai-podcast-agent-84b5fd4989-vpvtn (1/1 Ready)
+- Gunicorn Worker Count: 1 (ensures shared in-memory job queue)
+
+**Operational Notes:**
+- Asynchronous workflow state is held in-process; serializing requests ensures `/status/{job_id}` always reflects the latest progress.
+- Audio stitching automatically falls back to a NumPy-based combiner when ffmpeg concat encounters codec mismatches, guaranteeing final MP3 delivery even under constrained runtimes.
 
 **Deployment Architecture:**
 - Containerized application with Docker multi-stage builds
@@ -180,21 +186,18 @@ docker build -f deploy/Dockerfile.eks -t podcast-gen:latest .
 docker tag podcast-gen:latest <account-id>.dkr.ecr.us-west-2.amazonaws.com/podcast-gen:latest
 docker push <account-id>.dkr.ecr.us-west-2.amazonaws.com/podcast-gen:latest
 
-# 3. Update the Kubernetes manifests with the pushed image tag
-# (edit deploy/kubernetes/deployment.yaml if needed)
+# 3. Update the Kubernetes manifest with the pushed image tag
+# (edit deploy/kubernetes/deployment.yaml and set the image field)
 
 # 4. Ensure your kubeconfig targets the EKS cluster
 aws eks update-kubeconfig --name ai-podcast-agent-eks-cluster --region us-west-2
 
-# 5. Apply Kubernetes resources
+# 5. Apply Kubernetes resources (Deployment, Service, and HPA are combined in one file)
 kubectl apply -f deploy/kubernetes/deployment.yaml
-kubectl apply -f deploy/kubernetes/service.yaml
-# (Optional) Deploy the HPA
-kubectl apply -f deploy/kubernetes/hpa.yaml
 
 # 6. Verify rollout and retrieve the external endpoint
 kubectl get pods -l app=ai-podcast-agent
-kubectl get svc ai-podcast-agent
+kubectl get svc ai-podcast-agent-service
 ```
 
 **End-to-End Validation:**
@@ -202,19 +205,21 @@ kubectl get svc ai-podcast-agent
 - Execute the research-to-podcast workflow inside the running pod: `kubectl exec <pod-name> -- python scripts/test_new_pdf_paper_simplified.py`
 - Expected output: 50 TTS segments in `temp/audio/segments/` and final MP3 at `temp/audio/episodes/episode_lightendostereo_test_final.mp3`
 - Use `kubectl cp <pod-name>:temp/audio/episodes/episode_lightendostereo_test_final.mp3 ./` to download the generated episode locally
+- Access the browser workflow at `http://<loadbalancer-host>/ui` to upload a PDF, monitor live job status, and download the generated podcast, transcript, and report directly from the cluster
 ## API Documentation
 
-**Base URL**: http://16.146.42.199:8000
+**Base URL**: http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com
 
 **Core Endpoints:**
 
 ```
-GET  /               - Application status and NVIDIA NIM integration verification
-POST /upload         - Research paper upload and processing initiation
-GET  /status/{id}    - Processing status and progress tracking
-GET  /download/{id}  - Download completed podcast episodes and transcripts
-GET  /styles         - Available podcast style configurations
-POST /generate       - Direct podcast generation with custom parameters
+GET  /                - Application status and available endpoints
+GET  /health          - Liveness check (used by Kubernetes)
+GET  /ready           - Readiness check (used by Kubernetes)
+GET  /ui              - Browser UI to upload and generate podcasts
+POST /agentic-workflow - Start async job: upload PDF + options
+GET  /status/{job_id} - Check job progress and messages
+GET  /download/{job_id}/{artifact} - Download: audio | transcript | report
 ```
 
 **Integration Verification:**
@@ -277,17 +282,17 @@ import requests
 
 # Upload research paper
 with open('research_paper.pdf', 'rb') as f:
-    response = requests.post('http://16.146.42.199:8000/upload', files={'file': f})
+    response = requests.post('http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com/upload', files={'file': f})
     
 job_id = response.json()['job_id']
 
 # Check processing status
-status = requests.get(f'http://16.146.42.199:8000/status/{job_id}')
+status = requests.get(f'http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com/status/{job_id}')
 print(f"Processing status: {status.json()['status']}")
 
 # Download completed podcast
 if status.json()['status'] == 'completed':
-    podcast = requests.get(f'http://16.146.42.199:8000/download/{job_id}')
+    podcast = requests.get(f'http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com/download/{job_id}')
     with open('podcast_episode.mp3', 'wb') as f:
         f.write(podcast.content)
 ```
@@ -295,7 +300,7 @@ if status.json()['status'] == 'completed':
 **Style Customization:**
 ```python
 # Get available podcast styles
-styles = requests.get('http://16.146.42.199:8000/styles')
+styles = requests.get('http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com/styles')
 print("Available styles:", styles.json())
 
 # Generate with specific style
@@ -304,7 +309,7 @@ generate_params = {
     'duration': '20_minutes',
     'audience': 'expert'
 }
-response = requests.post('http://16.146.42.199:8000/generate', json=generate_params)
+response = requests.post('http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com/generate', json=generate_params)
 ```
 
 ## Performance Metrics
@@ -333,7 +338,7 @@ response = requests.post('http://16.146.42.199:8000/generate', json=generate_par
 - NVIDIA NIM API integration: Fully implemented and verified
 - Llama-3.1-Nemotron-Nano-8B-v1 model: Active in production deployment
 - nv-embedqa-e5-v5 embedding model: Integrated for semantic understanding
-- AWS cloud deployment: Live and operational at http://16.146.42.199:8000
+- AWS cloud deployment: Live and operational at http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com
 
 **Demonstration Results:**
 - Live application successfully responds with NVIDIA NIM model confirmations

@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir \
 # Copy the application
 COPY app/ ./app/
 COPY backend/ ./backend/
+COPY rag/ ./rag/
 COPY scripts/ ./scripts/
 COPY samples/ ./samples/
 

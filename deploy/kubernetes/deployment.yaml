@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: podcast-agent
-        image: 824274059565.dkr.ecr.us-west-2.amazonaws.com/podcast-gen:latest
+        image: 824274059565.dkr.ecr.us-west-2.amazonaws.com/podcast-gen:v20251104020238
         ports:
         - containerPort: 8000
           name: http

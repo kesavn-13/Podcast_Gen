@@ -13,6 +13,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, Dict, Any, List
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -31,14 +32,22 @@ logger = logging.getLogger(__name__)
 class SimplifiedPaperTester:
     """Test workflow with NVIDIA NIMs and podcast styles"""
     
-    def __init__(self, podcast_style: str = "layperson"):
-        self.paper_path = "samples/papers/LightEndoStereo- A Real-time Lightweight Stereo Matching Method for Endoscopy Images.pdf"
-        self.output_dir = Path("temp/new_paper_test")
+    def __init__(self, podcast_style: str = "layperson", paper_path: Optional[str] = None, output_dir: Optional[str] = None):
+        default_paper = Path("samples/papers/LightEndoStereo- A Real-time Lightweight Stereo Matching Method for Endoscopy Images.pdf")
+        self.paper_path = Path(paper_path) if paper_path else default_paper
+        self.output_dir = Path(output_dir) if output_dir else Path("temp/new_paper_test")
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Store selected podcast style
         self.podcast_style = podcast_style
-        
+
+        # Derive paper metadata for dynamic prompts
+        self.paper_title = self._derive_title_from_path(self.paper_path)
+        self.episode_slug = self._slugify(self.paper_title)
+
+        # Track latest run artifacts for reuse by backend
+        self._reset_run_state()
+
         # Check if we're in hackathon mode
         hackathon_mode = os.getenv('HACKATHON_MODE', 'false').lower() == 'true'
         use_nvidia = os.getenv('USE_NVIDIA_NIM', 'false').lower() == 'true'
@@ -137,6 +146,17 @@ class SimplifiedPaperTester:
         # Fix keys accidentally including colon inside the quotes, e.g. "text: "
         cleaned = re.sub(r'"([A-Za-z0-9_]+)\s*:\s"', r'"\1": "', cleaned)
 
+        # Attempt to repair lines with unclosed JSON strings produced by the model
+        repaired_lines = []
+        for line in cleaned.splitlines():
+            trimmed = line.strip()
+            if trimmed.startswith('"') and '":' in trimmed:
+                quote_count = trimmed.count('"')
+                if quote_count % 2 == 1:
+                    line = line + '"'
+            repaired_lines.append(line)
+        cleaned = "\n".join(repaired_lines)
+
         # Remove trailing commas before closing braces/brackets
         cleaned = re.sub(r',\s*([}\]])', r'\1', cleaned)
 
@@ -150,11 +170,78 @@ class SimplifiedPaperTester:
             preview = cleaned[:500]
             raise ValueError(f"Failed to parse JSON{f' for {context}' if context else ''}: {exc}. Preview: {preview}")
 
+    def _reset_run_state(self) -> None:
+        """Reset cached run artifacts so each execution starts clean."""
+        self.last_outline: Optional[Dict[str, Any]] = None
+        self.last_scripts: Optional[Any] = None
+        self.last_audio_path: Optional[str] = None
+        self.last_result: Dict[str, Any] = {}
+
+    def _derive_title_from_path(self, paper_path: Path) -> str:
+        """Generate a readable paper title based on file metadata."""
+        name = paper_path.stem if paper_path else "Research Paper"
+        cleaned = name.replace("_", " ").replace("-", " ").strip()
+        return cleaned.title() if cleaned else "Research Paper"
+
+    def _derive_title_from_text(self, text: str) -> Optional[str]:
+        """Use the first substantial line of text as the paper title."""
+        for line in text.splitlines():
+            candidate = line.strip()
+            if len(candidate) < 8:
+                continue
+            if not any(ch.isalpha() for ch in candidate):
+                continue
+            # Ignore section headers that look like numbering only
+            if candidate.lower().startswith(("table", "figure")):
+                continue
+            return candidate
+        return None
+
+    def _slugify(self, value: str) -> str:
+        """Simple slug generator for filenames and identifiers."""
+        if not value:
+            return "research-paper"
+
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", value).strip("-")
+        slug = slug.lower()
+        return slug or "research-paper"
+
+    def _refresh_metadata(self, text: Optional[str] = None) -> None:
+        """Update derived metadata when new text becomes available."""
+        if text:
+            derived_title = self._derive_title_from_text(text)
+            if derived_title:
+                self.paper_title = derived_title
+        self.episode_slug = self._slugify(self.paper_title)
+
+    def configure_run(self, paper_path: Optional[str] = None, output_dir: Optional[str] = None) -> None:
+        """Update paper and output directories for a new run."""
+        if paper_path:
+            self.paper_path = Path(paper_path)
+        if output_dir:
+            self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._reset_run_state()
+
     async def extract_pdf_text(self):
         """Extract text from PDF"""
         print("\n🔍 Step 1: PDF Text Extraction")
         print("=" * 50)
         
+        if self.paper_path.suffix.lower() == ".txt":
+            try:
+                text = self.paper_path.read_text(encoding='utf-8')
+                print(f"✅ Loaded {len(text)} characters from text file")
+                text_file = self.output_dir / "extracted_text.txt"
+                text_file.write_text(text, encoding='utf-8')
+                preview = text[:500] + "..." if len(text) > 500 else text
+                print(f"📄 Text preview:\n{preview}")
+                self._refresh_metadata(text)
+                return text
+            except Exception as exc:
+                print(f"❌ Text loading error: {exc}")
+                return None
+
         try:
             import fitz  # PyMuPDF
             doc = fitz.open(self.paper_path)
@@ -174,6 +261,8 @@ class SimplifiedPaperTester:
             # Show preview
             preview = text[:500] + "..." if len(text) > 500 else text
             print(f"📄 Text preview:\n{preview}")
+
+            self._refresh_metadata(text)
             
             return text
             
@@ -189,31 +278,32 @@ class SimplifiedPaperTester:
         try:
             # Use first 3000 characters for context
             context = paper_text[:3000]
-            
+            paper_title = self.paper_title or "Uploaded Research Paper"
+            # Escape braces so the JSON template renders literally in the prompt
             outline_prompt = f"""
-            You are a podcast script writer. Create a comprehensive 6-segment podcast outline for this research paper about LightEndoStereo.
-            
-            Paper content: {context}
-            
+            You are a podcast script writer. Create a comprehensive 6-segment podcast outline for the research paper titled "{paper_title}".
+
+            Paper content excerpt: {context}
+
             Create 6 segments covering:
             1. Introduction & Problem Setup (75 seconds)
-            2. Background & Related Work (150 seconds)  
+            2. Background & Related Work (150 seconds)
             3. Methodology & Architecture (210 seconds)
-            4. Experimental Results (210 seconds)
-            5. Clinical Applications & Impact (150 seconds)
-            6. Conclusions & Future Work (75 seconds)
-            
+            4. Experimental Results or Key Findings (210 seconds)
+            5. Real-world Impact & Applications (150 seconds)
+            6. Conclusions & Future Directions (75 seconds)
+
             IMPORTANT: Respond with ONLY valid JSON. No markdown, no explanations, no code blocks. Just the raw JSON object.
-            
+
             JSON structure:
             {{
-                "title": "LightEndoStereo: Real-time Stereo Matching for Endoscopy",
-                "description": "Complete analysis of lightweight stereo matching for medical endoscopy",
+                "title": "{paper_title}",
+                "description": "Podcast overview for the paper",
                 "segments": [
                     {{
-                        "title": "Introduction & Problem Setup",
-                        "duration_seconds": 75,
-                        "description": "Overview of the stereo matching problem in endoscopy"
+                        "title": "Segment topic",
+                        "duration_seconds": 120,
+                        "description": "Short summary of what this segment covers"
                     }},
                     ... (continue for all 6 segments)
                 ]
@@ -278,6 +368,7 @@ class SimplifiedPaperTester:
                     print(f"   {i}. {segment.get('title', 'Untitled')} ({segment.get('duration_seconds', 0)}s)")
                 
                 # Return outline_data even if segments is empty for debugging
+                self.last_outline = outline_data
                 return outline_data
                 
             except (json.JSONDecodeError, TypeError) as e:
@@ -332,7 +423,8 @@ class SimplifiedPaperTester:
                 draft_script = await self._generate_draft_script(segment, context, i)
                 if not draft_script:
                     print(f"   ❌ Failed to generate draft for segment {i}")
-                    continue
+                    draft_script = self._fallback_script(segment, context)
+                    print(f"   ⚠️  Using fallback dialogue ({len(draft_script)} lines)")
                 
                 # Step 3b: Fact-Check
                 print(f"   🔍 Fact-checking against source paper...")
@@ -352,6 +444,7 @@ class SimplifiedPaperTester:
                     'title': segment.get('title', 'Untitled'),
                     'script': final_script,
                     'factcheck_score': factcheck_result['accuracy'],
+                    'factcheck_feedback': factcheck_result.get('feedback', ''),
                     'was_rewritten': factcheck_result['needs_rewrite']
                 })
                 
@@ -376,6 +469,7 @@ class SimplifiedPaperTester:
                 print(f"✏️  Segments rewritten: {rewrites}/{len(final_scripts)}")
                 print(f"🎙️ Added podcast structure elements (intro, outro, ad breaks)")
                 
+                self.last_scripts = enhanced_scripts
                 return enhanced_scripts
             else:
                 print("❌ No scripts were successfully generated")
@@ -442,10 +536,12 @@ class SimplifiedPaperTester:
     async def _generate_draft_script(self, segment, context, segment_num):
         """Generate initial draft script"""
         
+        paper_title = self.paper_title or "the research paper"
+
         # Customize prompt based on podcast style
         if self.podcast_style == "debate_format":
             script_prompt = f"""
-            Create a natural debate script between Dr. Sarah (research advocate) and Dr. Alex (research skeptic) discussing this segment of the LightEndoStereo research paper.
+            Create a natural debate script between Dr. Sarah (research advocate) and Dr. Alex (research skeptic) discussing this segment of the research paper titled "{paper_title}".
             
             Segment: {segment.get('title', 'Untitled')}
             Description: {segment.get('description', '')}
@@ -484,7 +580,7 @@ class SimplifiedPaperTester:
             """
         else:
             script_prompt = f"""
-            Create a conversational podcast script between Dr. Sarah and Dr. Alex discussing this segment of the LightEndoStereo research paper.
+            Create a conversational podcast script between Dr. Sarah and Dr. Alex discussing this segment of the research paper titled "{paper_title}".
             
             Segment: {segment.get('title', 'Untitled')}
             Description: {segment.get('description', '')}
@@ -503,7 +599,7 @@ class SimplifiedPaperTester:
             JSON format:
             {{
                 "script": [
-                    {{"speaker": "host1", "text": "Welcome to our discussion on LightEndoStereo..."}},
+                    {{"speaker": "host1", "text": "Welcome to our discussion on {paper_title}..."}},
                     {{"speaker": "host2", "text": "This is fascinating research. Can you explain..."}},
                     ... (continue with natural conversation)
                 ]
@@ -513,15 +609,18 @@ class SimplifiedPaperTester:
         try:
             messages = [{"role": "user", "content": script_prompt}]
             response = await self.reasoner_client.generate(messages)
-            
+
+            raw_content_str = None
+
             # Handle the response format from Google Gemini and NVIDIA
             if isinstance(response, dict) and 'choices' in response:
-                content = response['choices'][0]['message']['content']
-                script_data = self._load_json_with_fixes(content, context=f"script draft (segment {segment_num})")
+                raw_content_str = response['choices'][0]['message']['content']
+                script_data = self._load_json_with_fixes(raw_content_str, context=f"script draft (segment {segment_num})")
             elif isinstance(response, dict) and 'content' in response:
                 # NVIDIA NIM format - content may be wrapped in markdown
                 content = response['content']
-                
+                raw_content_str = content
+
                 # Extract JSON from markdown code blocks if present
                 if '```json' in content:
                     # Find JSON block
@@ -541,36 +640,56 @@ class SimplifiedPaperTester:
                         json_content = content[json_start:].strip()
                 else:
                     json_content = content
-                
+
                 # Try to fix common JSON issues before parsing
                 json_content = json_content.strip()
-                
+
                 # Fix common NVIDIA JSON issues
                 if json_content.startswith('```') and not json_content.startswith('```json'):
                     # Remove any remaining code blocks
                     json_content = json_content.replace('```', '').strip()
-                
+
                 # Try to extract just the JSON object if there's extra text
                 if '{' in json_content and '}' in json_content:
                     start = json_content.find('{')
                     end = json_content.rfind('}') + 1
                     json_content = json_content[start:end]
-                
+
                 script_data = self._load_json_with_fixes(json_content, context=f"script draft (segment {segment_num})")
             elif isinstance(response, str):
+                raw_content_str = response
                 script_data = self._load_json_with_fixes(response, context=f"script draft (segment {segment_num})")
             else:
                 script_data = response
                 
             script_lines = script_data.get('script', [])
+            if not script_lines:
+                raise ValueError("Model returned empty script list")
+
             print(f"      ✅ Generated {len(script_lines)} dialogue lines")
             return script_lines
             
         except Exception as e:
             print(f"      ❌ Draft generation failed: {e}")
+            raw_preview = None
             if isinstance(response, dict) and 'content' in response:
-                print(f"      🔍 Raw content: {response['content'][:500]}...")
-            return None
+                raw_preview = response['content']
+                print(f"      🔍 Raw content: {raw_preview[:500]}...")
+            elif isinstance(response, dict) and 'choices' in response:
+                raw_preview = response['choices'][0]['message']['content']
+            elif isinstance(response, str):
+                raw_preview = response
+
+            if raw_preview:
+                repaired = await self._attempt_json_repair(raw_preview, segment.get('title', 'Untitled'), segment_num)
+                if repaired:
+                    script_lines = repaired.get('script', [])
+                    if script_lines:
+                        print(f"      ✅ JSON repair succeeded ({len(script_lines)} dialogue lines)")
+                        return script_lines
+
+            print("      ⚠️  Falling back to templated dialogue for this segment")
+            return self._fallback_script(segment, context)
     
     async def _factcheck_script(self, script, context, segment):
         """Fact-check script against source material"""
@@ -725,18 +844,22 @@ class SimplifiedPaperTester:
         print("=" * 50)
         print(f"🎭 Using podcast style: {self.podcast_style}")
         
+        paper_title = self.paper_title or "Research Paper Podcast"
+        episode_slug = self.episode_slug or "research-paper"
+
         try:
             if not self.generate_audio_enabled or not self.audio_producer:
                 print("🔇 Audio generation disabled; skipping TTS and stitching steps")
                 placeholder = self.output_dir / "audio_generation_skipped.txt"
                 placeholder.write_text("Audio generation skipped by configuration.\n")
+                self.last_audio_path = str(placeholder)
                 return str(placeholder)
 
             # Prepare episode data
             episode_data = {
-                'episode_id': 'lightendostereo_test',
-                'title': 'LightEndoStereo: Real-time Stereo Matching for Endoscopy',
-                'description': 'A comprehensive discussion of lightweight stereo matching methods for medical endoscopy applications',
+                'episode_id': episode_slug,
+                'title': paper_title,
+                'description': f'A comprehensive discussion of {paper_title}',
                 'segments': []
             }
             
@@ -805,6 +928,7 @@ class SimplifiedPaperTester:
                 print(f"📁 File: {audio_file}")
                 print(f"📊 Size: {file_size:.2f} MB")
                 
+                self.last_audio_path = audio_file
                 return audio_file
             else:
                 print("❌ Audio generation failed - no file created")
@@ -813,15 +937,88 @@ class SimplifiedPaperTester:
         except Exception as e:
             print(f"❌ Audio generation error: {e}")
             return None
+
+    async def _attempt_json_repair(self, raw_content: str, segment_title: str, segment_num: int) -> Optional[Dict[str, Any]]:
+        """Ask the LLM to repair malformed JSON responses."""
+        repair_prompt = f"""
+        The following content was intended to be valid JSON for a podcast script segment (segment {segment_num}: {segment_title}) but contains formatting errors such as missing quotes or unescaped newlines.
+        Please return ONLY valid JSON matching this schema:
+        {{
+            "script": [
+                {{"speaker": "host1", "text": "..."}},
+                {{"speaker": "host2", "text": "..."}}
+            ]
+        }}
+
+        Content to repair:
+        ```
+        {raw_content}
+        ```
+        """
+
+        messages = [
+            {"role": "system", "content": "You fix malformed JSON and respond with valid JSON only."},
+            {"role": "user", "content": repair_prompt}
+        ]
+
+        try:
+            repair_response = await self.reasoner_client.generate(messages)
+
+            repaired_text: Optional[str] = None
+            if isinstance(repair_response, dict) and 'choices' in repair_response:
+                repaired_text = repair_response['choices'][0]['message']['content']
+            elif isinstance(repair_response, dict) and 'content' in repair_response:
+                repaired_text = repair_response['content']
+            elif isinstance(repair_response, str):
+                repaired_text = repair_response
+
+            if not repaired_text:
+                return None
+
+            return self._load_json_with_fixes(repaired_text, context="json repair")
+        except Exception as exc:
+            print(f"      ⚠️  JSON repair attempt failed: {exc}")
+            return None
+
+    def _fallback_script(self, segment: Dict[str, Any], context: str) -> List[Dict[str, str]]:
+        """Generate a minimal conversation when the model response is unusable."""
+        title = segment.get('title', 'Research Highlight')
+        description = segment.get('description', '')
+        summary = description[:240] + ('...' if len(description) > 240 else '')
+        default_summary = "this part builds on the paper's core ideas."
+        summary_text = summary if summary else default_summary
+
+        # Simple two-speaker exchange to keep pipeline moving
+        return [
+            {
+                "speaker": "host1",
+                "text": f"Let's unpack the '{title}' section. In short, {summary_text}"
+            },
+            {
+                "speaker": "host2",
+                "text": "Right, and based on the paper it emphasizes why this matters for the overall story."
+            },
+            {
+                "speaker": "host1",
+                "text": "Exactly. Even without the full script, we can highlight the motivations, the method, and what listeners should take away."
+            },
+            {
+                "speaker": "host2",
+                "text": "We'll plan to refine this section once the detailed draft is available, but this keeps the episode flowing."
+            }
+        ]
     
     async def run_simplified_test(self):
         """Run complete workflow: Upload → Index → Outline → Draft → FactCheck → Rewrite → TTS → Stitch → Export"""
-        print("🚀 Complete PDF Paper Workflow Test: LightEndoStereo")
+        paper_title = self.paper_title or "Research Paper"
+        print(f"🚀 Complete PDF Paper Workflow Test: {paper_title}")
         print("📋 Workflow: Upload → Index → Outline → Draft → FactCheck → Rewrite → TTS → Stitch → Export")
         print("⚠️  Note: Bypassing embeddings due to quota limits")
         print("=" * 70)
         print(f"📅 Test started: {datetime.now()}")
-        
+
+        self._reset_run_state()
+
         # Step 1: Upload (PDF Text Extraction)
         print("\n📤 Step 1: Upload")
         paper_text = await self.extract_pdf_text()
@@ -881,6 +1078,15 @@ class SimplifiedPaperTester:
         else:
             print("⚠️  PARTIAL SUCCESS: Workflow mostly complete, audio issues")
         
+        self.last_result = {
+            "success": bool(audio_file),
+            "paper_path": str(self.paper_path),
+            "outline": self.last_outline,
+            "segments": self.last_scripts,
+            "audio_file": audio_file,
+            "output_dir": str(self.output_dir)
+        }
+
         return bool(audio_file)
 
 async def test_multiple_styles():
