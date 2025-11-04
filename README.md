@@ -159,7 +159,8 @@ graph TD
 
 **Live Deployment Status:**
 
-- Public Load Balancer: http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com
+- Public Load Balancer UI: http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com/ui
+- Public API Base: http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com
 - Active Image Tag: 824274059565.dkr.ecr.us-west-2.amazonaws.com/podcast-gen:v20251104121815
 - Running Pod: ai-podcast-agent-84b5fd4989-vpvtn (1/1 Ready)
 - Gunicorn Worker Count: 1 (ensures shared in-memory job queue)
@@ -205,7 +206,7 @@ kubectl get svc ai-podcast-agent-service
 - Execute the research-to-podcast workflow inside the running pod: `kubectl exec <pod-name> -- python scripts/test_new_pdf_paper_simplified.py`
 - Expected output: 50 TTS segments in `temp/audio/segments/` and final MP3 at `temp/audio/episodes/episode_lightendostereo_test_final.mp3`
 - Use `kubectl cp <pod-name>:temp/audio/episodes/episode_lightendostereo_test_final.mp3 ./` to download the generated episode locally
-- Access the browser workflow at `http://<loadbalancer-host>/ui` to upload a PDF, monitor live job status, and download the generated podcast, transcript, and report directly from the cluster
+- Access the browser workflow at `http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com/ui` to upload a PDF, monitor live job status, and download the generated podcast, transcript, and report directly from the cluster
 ## API Documentation
 
 **Base URL**: http://a437258f71a6c493bb9e98549430b26a-942051640.us-west-2.elb.amazonaws.com
