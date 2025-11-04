@@ -377,7 +377,7 @@ OPENSEARCH_ENDPOINT=your-opensearch-url
 
 
 
-## 🚀 Future Work
+## Future Work
 
 ### Immediate Enhancements (Post-Hackathon):
 - **Clickable Citations**: Span-level source linking in transcripts
@@ -398,7 +398,7 @@ OPENSEARCH_ENDPOINT=your-opensearch-url
 - Advanced citation formats (APA, MLA, Chicago)
 
 
-## 🤝 Contributing
+## Contributing
 
 This project was developed for the AWS & NVIDIA Agentic AI Hackathon. For questions about the implementation or future collaboration opportunities, please reach out through the hackathon channels.
 
