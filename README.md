@@ -382,28 +382,18 @@ OPENSEARCH_ENDPOINT=your-opensearch-url
 
 
 
-## 🚀 Future Work
-
+## Future Work
 ### Immediate Enhancements (Post-Hackathon):
-- **Clickable Citations**: Span-level source linking in transcripts
-- **Multi-Document Mode**: Compare and contrast multiple papers
-- **Debate Format**: Generate opposing viewpoints for controversial topics
-- **Glossary Integration**: Automatic technical term explanations
+- Make the voices look more natural and engaging. 
+- Compare and contrast multiple papers
+- Generate opposing viewpoints for controversial topics
+- Automatic technical term explanations
 
 ### Advanced Features:
-- **Analytics Dashboard**: Latency, token usage, and cost optimization
-- **API Integration**: Direct arXiv, PubMed, and institutional repository access
-- **Collaboration Tools**: Team annotations and shared podcast libraries
-- **Platform Export**: Direct publishing to Spotify, Apple Podcasts, etc.
+- Direct arXiv, PubMed, and institutional repository access
+- Direct publishing to Spotify, Apple Podcasts, etc.
 
-### Scaling Considerations:
-- Kubernetes deployment for production workloads
-- Multi-region support for global accessibility
-- Enterprise SSO integration
-- Advanced citation formats (APA, MLA, Chicago)
-
-
-## 🤝 Contributing
+## Contributing
 
 This project was developed for the AWS & NVIDIA Agentic AI Hackathon. For questions about the implementation or future collaboration opportunities, please reach out through the hackathon channels.
 
