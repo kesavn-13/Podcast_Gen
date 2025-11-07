@@ -60,11 +60,11 @@ class SimplifiedPaperTester:
         embed_type = type(self.embedding_client).__name__
         
         if hackathon_mode and use_nvidia:
-            print(f"🏆 HACKATHON MODE: Using NVIDIA NIMs")
-            print(f"   🤖 LLM: {llm_type}")
-            print(f"   🔍 Embedding: {embed_type}")
+            print(f" HACKATHON MODE: Using NVIDIA NIMs")
+            print(f" LLM: {llm_type}")
+            print(f" Embedding: {embed_type}")
         else:
-            print(f"🤖 Using LLM: {llm_type}, Embedding: {embed_type}")
+            print(f" Using LLM: {llm_type}, Embedding: {embed_type}")
         
         # Audio configuration flags so we can disable resource-heavy pieces on small nodes
         self.use_natural_voices = os.getenv('USE_NATURAL_VOICES', 'true').lower() == 'true'
@@ -95,29 +95,29 @@ class SimplifiedPaperTester:
         }
         
         if podcast_style in style_features:
-            print(f"📝 Style features: {style_features[podcast_style]}")
+            print(f" Style features: {style_features[podcast_style]}")
 
         if not self.generate_audio_enabled:
-            print("🔇 Audio generation disabled via GENERATE_PODCAST_AUDIO=false")
+            print(" Audio generation disabled via GENERATE_PODCAST_AUDIO=false")
         else:
             if self.use_real_tts:
                 voice_note = "Google TTS + Enhanced pyttsx3" if self.use_natural_voices else "mock voice library"
-                print(f"🎤 Natural voices enabled: {voice_note}")
+                print(f" Natural voices enabled: {voice_note}")
             else:
-                print("🎤 Using mock TTS pipeline (USE_REAL_TTS=false)")
-            print(f"✨ Conversation styles integrated for human-like dialogue")
+                print(" Using mock TTS pipeline (USE_REAL_TTS=false)")
+            print(f" Conversation styles integrated for human-like dialogue")
 
             # Show available styles when TTS is active
             try:
                 from app.audio_generator import RealTTSEngine
                 available_styles = RealTTSEngine.list_available_styles()
-                print("🎙️ Available podcast styles:")
+                print(" Available podcast styles:")
                 for style_id, description in available_styles.items():
                     indicator = "👉" if style_id == podcast_style else "  "
                     print(f"   {indicator} {style_id}: {description}")
                 print()
             except Exception as e:
-                print(f"⚠️  Could not load styles info: {e}")
+                print(f"  Could not load styles info: {e}")
                 print()
         
     def _load_json_with_fixes(self, raw_json, context=""):
@@ -231,15 +231,15 @@ class SimplifiedPaperTester:
         if self.paper_path.suffix.lower() == ".txt":
             try:
                 text = self.paper_path.read_text(encoding='utf-8')
-                print(f"✅ Loaded {len(text)} characters from text file")
+                print(f" Loaded {len(text)} characters from text file")
                 text_file = self.output_dir / "extracted_text.txt"
                 text_file.write_text(text, encoding='utf-8')
                 preview = text[:500] + "..." if len(text) > 500 else text
-                print(f"📄 Text preview:\n{preview}")
+                print(f" Text preview:\n{preview}")
                 self._refresh_metadata(text)
                 return text
             except Exception as exc:
-                print(f"❌ Text loading error: {exc}")
+                print(f" Text loading error: {exc}")
                 return None
 
         try:
@@ -251,7 +251,7 @@ class SimplifiedPaperTester:
                 text += page.get_text()
             doc.close()
             
-            print(f"✅ Extracted {len(text)} characters from {page_count} pages")
+            print(f" Extracted {len(text)} characters from {page_count} pages")
             
             # Save extracted text
             text_file = self.output_dir / "extracted_text.txt"
@@ -267,12 +267,12 @@ class SimplifiedPaperTester:
             return text
             
         except Exception as e:
-            print(f"❌ PDF extraction error: {e}")
+            print(f" PDF extraction error: {e}")
             return None
     
     async def generate_outline_direct(self, paper_text):
         """Generate outline directly using Google Gemini (no embeddings)"""
-        print("\n🧠 Step 2: Google Gemini Outline Generation (Direct)")
+        print("\n Step 2: Google Gemini Outline Generation (Direct)")
         print("=" * 50)
         
         try:
@@ -351,13 +351,13 @@ class SimplifiedPaperTester:
                     outline_data = response
                 
                 segments = outline_data.get('segments', [])
-                print("✅ Google Gemini outline generation successful")
-                print(f"📊 Generated {len(segments)} segments")
+                print(" Google Gemini outline generation successful")
+                print(f" Generated {len(segments)} segments")
                 
                 # Debug: Show the actual response
-                print(f"🔍 Debug - Response keys: {list(outline_data.keys())}")
+                print(f" Debug - Response keys: {list(outline_data.keys())}")
                 if not segments:
-                    print(f"⚠️  No segments found. Full response: {outline_data}")
+                    print(f"  No segments found. Full response: {outline_data}")
                 
                 # Save outline
                 outline_file = self.output_dir / "podcast_outline.json"
@@ -372,25 +372,25 @@ class SimplifiedPaperTester:
                 return outline_data
                 
             except (json.JSONDecodeError, TypeError) as e:
-                print(f"❌ Failed to parse JSON response: {e}")
+                print(f" Failed to parse JSON response: {e}")
                 print(f"Raw response type: {type(response)}")
                 print(f"Raw response: {str(response)[:1000]}...")
                 
                 # Try to extract and show the actual JSON content
                 if isinstance(response, dict) and 'content' in response:
-                    print(f"📝 JSON Content Length: {len(response['content'])}")
-                    print(f"📝 JSON Content Preview: {response['content'][:2000]}...")
+                    print(f" JSON Content Length: {len(response['content'])}")
+                    print(f" JSON Content Preview: {response['content'][:2000]}...")
                     if len(response['content']) > 2000:
-                        print(f"📝 JSON Content End: ...{response['content'][-500:]}")
+                        print(f" JSON Content End: ...{response['content'][-500:]}")
                 return None
                 
         except Exception as e:
-            print(f"❌ Outline generation error: {e}")
+            print(f" Outline generation error: {e}")
             return None
     
     async def generate_and_validate_scripts(self, outline_data, paper_text):
         """Generate scripts with proper workflow: Draft → FactCheck → Rewrite if needed"""
-        print("\n📝 Step 3: Podcast Script Generation with FactCheck Workflow")
+        print("\n Step 3: Podcast Script Generation with FactCheck Workflow")
         print("=" * 50)
         
         try:
@@ -399,7 +399,7 @@ class SimplifiedPaperTester:
             
             # Check if we have segments
             if not segments:
-                print("❌ No segments found in outline data")
+                print(" No segments found in outline data")
                 return None
             
             # Split paper text into sections for different segments
@@ -412,19 +412,19 @@ class SimplifiedPaperTester:
                 text_sections.append(paper_text[start:start+1500])  # Limit to 1500 chars per section
             
             for i, segment in enumerate(segments, 1):
-                print(f"\n🎬 Processing Segment {i}: {segment.get('title', 'Untitled')}")
+                print(f"\n Processing Segment {i}: {segment.get('title', 'Untitled')}")
                 print("─" * 40)
                 
                 # Use relevant text section
                 context = text_sections[i-1] if i-1 < len(text_sections) else paper_text[:1500]
                 
                 # Step 3a: Draft Generation
-                print(f"   📝 Drafting script...")
+                print(f" Drafting script...")
                 draft_script = await self._generate_draft_script(segment, context, i)
                 if not draft_script:
-                    print(f"   ❌ Failed to generate draft for segment {i}")
+                    print(f" Failed to generate draft for segment {i}")
                     draft_script = self._fallback_script(segment, context)
-                    print(f"   ⚠️  Using fallback dialogue ({len(draft_script)} lines)")
+                    print(f" Using fallback dialogue ({len(draft_script)} lines)")
                 
                 # Step 3b: Fact-Check
                 print(f"   🔍 Fact-checking against source paper...")
@@ -433,11 +433,11 @@ class SimplifiedPaperTester:
                 # Step 3c: Rewrite if needed
                 final_script = draft_script
                 if factcheck_result['needs_rewrite']:
-                    print(f"   ✏️  Rewriting based on fact-check feedback...")
+                    print(f" Rewriting based on fact-check feedback...")
                     final_script = await self._rewrite_script(draft_script, factcheck_result['feedback'], context)
-                    print(f"   ✅ Script rewritten with improved accuracy")
+                    print(f" Script rewritten with improved accuracy")
                 else:
-                    print(f"   ✅ Script passed fact-check (accuracy: {factcheck_result['accuracy']:.1%})")
+                    print(f" Script passed fact-check (accuracy: {factcheck_result['accuracy']:.1%})")
                 
                 final_scripts.append({
                     'segment_id': i,
@@ -464,19 +464,19 @@ class SimplifiedPaperTester:
                 total_accuracy = sum(s['factcheck_score'] for s in final_scripts) / len(final_scripts)
                 rewrites = sum(1 for s in final_scripts if s['was_rewritten'])
                 
-                print(f"\n✅ Generated {len(final_scripts)} fact-checked segments")
-                print(f"📊 Average factcheck accuracy: {total_accuracy:.1%}")
-                print(f"✏️  Segments rewritten: {rewrites}/{len(final_scripts)}")
-                print(f"🎙️ Added podcast structure elements (intro, outro, ad breaks)")
+                print(f"\n Generated {len(final_scripts)} fact-checked segments")
+                print(f" Average factcheck accuracy: {total_accuracy:.1%}")
+                print(f"  Segments rewritten: {rewrites}/{len(final_scripts)}")
+                print(f" Added podcast structure elements (intro, outro, ad breaks)")
                 
                 self.last_scripts = enhanced_scripts
                 return enhanced_scripts
             else:
-                print("❌ No scripts were successfully generated")
+                print(" No scripts were successfully generated")
                 return None
                 
         except Exception as e:
-            print(f"❌ Script generation workflow error: {e}")
+            print(f" Script generation workflow error: {e}")
             return None
 
     def _add_podcast_structure(self, final_scripts, topic_title):
@@ -666,15 +666,15 @@ class SimplifiedPaperTester:
             if not script_lines:
                 raise ValueError("Model returned empty script list")
 
-            print(f"      ✅ Generated {len(script_lines)} dialogue lines")
+            print(f" Generated {len(script_lines)} dialogue lines")
             return script_lines
             
         except Exception as e:
-            print(f"      ❌ Draft generation failed: {e}")
+            print(f" Draft generation failed: {e}")
             raw_preview = None
             if isinstance(response, dict) and 'content' in response:
                 raw_preview = response['content']
-                print(f"      🔍 Raw content: {raw_preview[:500]}...")
+                print(f" Raw content: {raw_preview[:500]}...")
             elif isinstance(response, dict) and 'choices' in response:
                 raw_preview = response['choices'][0]['message']['content']
             elif isinstance(response, str):
@@ -685,10 +685,10 @@ class SimplifiedPaperTester:
                 if repaired:
                     script_lines = repaired.get('script', [])
                     if script_lines:
-                        print(f"      ✅ JSON repair succeeded ({len(script_lines)} dialogue lines)")
+                        print(f" JSON repair succeeded ({len(script_lines)} dialogue lines)")
                         return script_lines
 
-            print("      ⚠️  Falling back to templated dialogue for this segment")
+            print(" Falling back to templated dialogue for this segment")
             return self._fallback_script(segment, context)
     
     async def _factcheck_script(self, script, context, segment):
@@ -835,21 +835,21 @@ class SimplifiedPaperTester:
             return script_data.get('script', original_script)
             
         except Exception as e:
-            print(f"      ⚠️  Rewrite failed, using original: {e}")
+            print(f" Rewrite failed, using original: {e}")
             return original_script
     
     async def generate_audio(self, scripts_data):
         """Step 4: TTS Generation and Step 5: Stitching with Podcast Styles"""
-        print("\n🎵 Step 4: TTS Generation & Step 5: Audio Stitching")
+        print("\n Step 4: TTS Generation & Step 5: Audio Stitching")
         print("=" * 50)
-        print(f"🎭 Using podcast style: {self.podcast_style}")
+        print(f" Using podcast style: {self.podcast_style}")
         
         paper_title = self.paper_title or "Research Paper Podcast"
         episode_slug = self.episode_slug or "research-paper"
 
         try:
             if not self.generate_audio_enabled or not self.audio_producer:
-                print("🔇 Audio generation disabled; skipping TTS and stitching steps")
+                print(" Audio generation disabled; skipping TTS and stitching steps")
                 placeholder = self.output_dir / "audio_generation_skipped.txt"
                 placeholder.write_text("Audio generation skipped by configuration.\n")
                 self.last_audio_path = str(placeholder)
@@ -873,7 +873,7 @@ class SimplifiedPaperTester:
                 episode_data['segments'].append(segment_data)
             
             # Generate audio with conversation styles
-            print("🎤 Starting audio generation with conversation flow...")
+            print(" Starting audio generation with conversation flow...")
             
             # Preserve AI-generated speaker assignments instead of overriding them
             script_segments = []
@@ -911,10 +911,10 @@ class SimplifiedPaperTester:
                     })
             
             if not script_segments:
-                print("❌ No content found for audio generation")
+                print(" No content found for audio generation")
                 return None
             
-            print(f"📝 Processing {len(script_segments)} dialogue segments preserving AI speaker assignments...")
+            print(f" Processing {len(script_segments)} dialogue segments preserving AI speaker assignments...")
             
             # Generate audio preserving original speaker assignments with natural voices + styles
             audio_file = await self.audio_producer.generate_podcast_audio(
@@ -924,18 +924,18 @@ class SimplifiedPaperTester:
             
             if audio_file and os.path.exists(audio_file):
                 file_size = os.path.getsize(audio_file) / (1024 * 1024)  # MB
-                print(f"✅ Audio generated successfully with {self.podcast_style} style!")
-                print(f"📁 File: {audio_file}")
-                print(f"📊 Size: {file_size:.2f} MB")
+                print(f" Audio generated successfully with {self.podcast_style} style!")
+                print(f" File: {audio_file}")
+                print(f" Size: {file_size:.2f} MB")
                 
                 self.last_audio_path = audio_file
                 return audio_file
             else:
-                print("❌ Audio generation failed - no file created")
+                print(" Audio generation failed - no file created")
                 return None
                 
         except Exception as e:
-            print(f"❌ Audio generation error: {e}")
+            print(f" Audio generation error: {e}")
             return None
 
     async def _attempt_json_repair(self, raw_content: str, segment_title: str, segment_num: int) -> Optional[Dict[str, Any]]:
@@ -977,7 +977,7 @@ class SimplifiedPaperTester:
 
             return self._load_json_with_fixes(repaired_text, context="json repair")
         except Exception as exc:
-            print(f"      ⚠️  JSON repair attempt failed: {exc}")
+            print(f" JSON repair attempt failed: {exc}")
             return None
 
     def _fallback_script(self, segment: Dict[str, Any], context: str) -> List[Dict[str, str]]:
@@ -1011,72 +1011,72 @@ class SimplifiedPaperTester:
     async def run_simplified_test(self):
         """Run complete workflow: Upload → Index → Outline → Draft → FactCheck → Rewrite → TTS → Stitch → Export"""
         paper_title = self.paper_title or "Research Paper"
-        print(f"🚀 Complete PDF Paper Workflow Test: {paper_title}")
-        print("📋 Workflow: Upload → Index → Outline → Draft → FactCheck → Rewrite → TTS → Stitch → Export")
-        print("⚠️  Note: Bypassing embeddings due to quota limits")
+        print(f" Complete PDF Paper Workflow Test: {paper_title}")
+        print(" Workflow: Upload → Index → Outline → Draft → FactCheck → Rewrite → TTS → Stitch → Export")
+        print("  Note: Bypassing embeddings due to quota limits")
         print("=" * 70)
-        print(f"📅 Test started: {datetime.now()}")
+        print(f" Test started: {datetime.now()}")
 
         self._reset_run_state()
 
         # Step 1: Upload (PDF Text Extraction)
-        print("\n📤 Step 1: Upload")
+        print("\n Step 1: Upload")
         paper_text = await self.extract_pdf_text()
         if not paper_text:
-            print("❌ Cannot proceed without extracted text")
+            print(" Cannot proceed without extracted text")
             return False
         
         # Step 2: Index (Skipped due to embedding quota)
-        print("\n🗃️  Step 2: Index")
-        print("⚠️  Indexing skipped due to embedding API quota limits")
-        print("✅ Using direct text analysis instead")
+        print("\n  Step 2: Index")
+        print("  Indexing skipped due to embedding API quota limits")
+        print(" Using direct text analysis instead")
         
         # Step 3: Outline Generation
-        print("\n📋 Step 3: Outline Generation")
+        print("\n Step 3: Outline Generation")
         outline_data = await self.generate_outline_direct(paper_text)
         if not outline_data:
-            print("❌ Cannot proceed without outline")
+            print(" Cannot proceed without outline")
             return False
         
         # Steps 4-6: Draft → FactCheck → Rewrite (for each segment)
         scripts_data = await self.generate_and_validate_scripts(outline_data, paper_text)
         if not scripts_data:
-            print("❌ Cannot proceed without scripts")
+            print(" Cannot proceed without scripts")
             return False
         
         # Steps 7-8: TTS → Stitch
         audio_file = await self.generate_audio(scripts_data)
         
         # Step 9: Export & Final Results
-        print("\n📤 Step 9: Export & Final Results")
+        print("\n Step 9: Export & Final Results")
         print("=" * 70)
         if audio_file:
             if self.generate_audio_enabled:
-                print("✅ COMPLETE SUCCESS: Full workflow pipeline working!")
-                print(f"🎧 Generated podcast: {audio_file}")
+                print(" COMPLETE SUCCESS: Full workflow pipeline working!")
+                print(f" Generated podcast: {audio_file}")
             else:
-                print("✅ COMPLETE SUCCESS: Text workflow complete (audio skipped by configuration)")
-                print(f"🗒️ Audio step output: {audio_file}")
+                print(" COMPLETE SUCCESS: Text workflow complete (audio skipped by configuration)")
+                print(f" Audio step output: {audio_file}")
 
-            print(f"📊 All files saved to: {self.output_dir}")
-            print("\n📋 Completed Workflow Steps:")
-            print("   ✅ Upload: PDF text extraction")
-            print("   ⚠️  Index: Skipped (embedding quota)")
-            print("   ✅ Outline: Google Gemini generation")
-            print("   ✅ Draft: Script generation per segment")
-            print("   ✅ FactCheck: Accuracy verification")
-            print("   ✅ Rewrite: Content improvement (if needed)")
+            print(f" All files saved to: {self.output_dir}")
+            print("\n Completed Workflow Steps:")
+            print(" Upload: PDF text extraction")
+            print(" Index: Skipped (embedding quota)")
+            print(" Outline: Google Gemini generation")
+            print(" Draft: Script generation per segment")
+            print(" FactCheck: Accuracy verification")
+            print(" Rewrite: Content improvement (if needed)")
 
             if self.generate_audio_enabled:
-                print("   ✅ TTS: Professional audio synthesis")
-                print("   ✅ Stitch: Episode assembly")
-                print("   ✅ Export: Final MP3 generation")
+                print(" TTS: Professional audio synthesis")
+                print(" Stitch: Episode assembly")
+                print(" Export: Final MP3 generation")
             else:
-                print("   ⚠️  TTS: Skipped (GENERATE_PODCAST_AUDIO=false)")
-                print("   ⚠️  Stitch: Skipped (GENERATE_PODCAST_AUDIO=false)")
-                print("   ⚠️  Export: Skipped (GENERATE_PODCAST_AUDIO=false)")
+                print(" TTS: Skipped (GENERATE_PODCAST_AUDIO=false)")
+                print(" Stitch: Skipped (GENERATE_PODCAST_AUDIO=false)")
+                print(" Export: Skipped (GENERATE_PODCAST_AUDIO=false)")
         else:
-            print("⚠️  PARTIAL SUCCESS: Workflow mostly complete, audio issues")
+            print(" PARTIAL SUCCESS: Workflow mostly complete, audio issues")
         
         self.last_result = {
             "success": bool(audio_file),
@@ -1091,7 +1091,7 @@ class SimplifiedPaperTester:
 
 async def test_multiple_styles():
     """Test the system with multiple podcast styles to showcase variety"""
-    print("🎭 COMPREHENSIVE STYLE TESTING")
+    print("COMPREHENSIVE STYLE TESTING")
     print("=" * 60)
     
     # Test all available podcast styles from macOS folder with descriptions
@@ -1109,8 +1109,8 @@ async def test_multiple_styles():
     results = {}
     
     for style_name, style_description in test_styles:
-        print(f"\n🎭 Testing Style: {style_name.upper()}")
-        print(f"📝 Description: {style_description}")
+        print(f"\n Testing Style: {style_name.upper()}")
+        print(f" Description: {style_description}")
         print("-" * 60)
         
         try:
@@ -1119,37 +1119,37 @@ async def test_multiple_styles():
             results[style_name] = success
             
             if success:
-                print(f"✅ {style_name} style: SUCCESSFUL")
+                print(f" {style_name} style: SUCCESSFUL")
             else:
-                print(f"❌ {style_name} style: FAILED")
+                print(f" {style_name} style: FAILED")
                 
         except Exception as e:
-            print(f"❌ {style_name} style error: {e}")
+            print(f" {style_name} style error: {e}")
             results[style_name] = False
     
     # Summary
-    print("\n🎯 STYLE TESTING SUMMARY")
+    print("\n STYLE TESTING SUMMARY")
     print("=" * 40)
     successful_styles = [style for style, success in results.items() if success]
     failed_styles = [style for style, success in results.items() if not success]
     
-    print(f"✅ Successful styles ({len(successful_styles)}/{len(test_styles)}):")
+    print(f" Successful styles ({len(successful_styles)}/{len(test_styles)}):")
     for style in successful_styles:
         # Find description for this style
         style_desc = next((desc for name, desc in test_styles if name == style), "")
         print(f"   ✓ {style}: {style_desc}")
     
     if failed_styles:
-        print(f"❌ Failed styles ({len(failed_styles)}/{len(test_styles)}):")
+        print(f" Failed styles ({len(failed_styles)}/{len(test_styles)}):")
         for style in failed_styles:
             style_desc = next((desc for name, desc in test_styles if name == style), "")
             print(f"   ✗ {style}: {style_desc}")
     
     if len(successful_styles) == len(test_styles):
-        print(f"\n🎉 ALL {len(test_styles)} PODCAST STYLES WORKING PERFECTLY!")
-        print("🏆 Complete NVIDIA NIM integration with full style variety!")
+        print(f"\n ALL {len(test_styles)} PODCAST STYLES WORKING PERFECTLY!")
+        print(" Complete NVIDIA NIM integration with full style variety!")
     else:
-        print(f"\n⚠️  ISSUES: {len(failed_styles)} styles need attention")
+        print(f"\n  ISSUES: {len(failed_styles)} styles need attention")
     
     return len(successful_styles) > 0
 
@@ -1175,30 +1175,30 @@ async def main():
     
     # Set hackathon environment if requested
     if args.nvidia_only:
-        print("🏆 NVIDIA-ONLY MODE: Using NVIDIA Llama + Embedding NIMs")
+        print(" NVIDIA-ONLY MODE: Using NVIDIA Llama + Embedding NIMs")
         os.environ['HACKATHON_MODE'] = 'true'
         os.environ['USE_NVIDIA_NIM'] = 'true'
         os.environ['USE_GOOGLE_LLM'] = 'false'
     
     try:
         if args.test_multiple:
-            print("� TESTING MULTIPLE PODCAST STYLES WITH NVIDIA INTEGRATION")
+            print(" TESTING MULTIPLE PODCAST STYLES WITH NVIDIA INTEGRATION")
             success = await test_multiple_styles()
         else:
-            print(f"�🎙️ Selected podcast style: {args.style}")
+            print(f" Selected podcast style: {args.style}")
             if args.nvidia_only:
-                print("🏆 Using NVIDIA Llama-3.1-Nemotron-Nano-8B-v1 + nv-embedqa-e5-v5")
+                print(" Using NVIDIA Llama-3.1-Nemotron-Nano-8B-v1 + nv-embedqa-e5-v5")
             
             tester = SimplifiedPaperTester(podcast_style=args.style)
             success = await tester.run_simplified_test()
         
         if success:
-            print("\n🎉 SUCCESS: Your PDF paper pipeline is working with podcast styles!")
+            print("\n SUCCESS: Your PDF paper pipeline is working with podcast styles!")
             if not args.test_multiple:
-                print(f"🎭 Used conversation style: {args.style}")
+                print(f" Used conversation style: {args.style}")
             if args.nvidia_only:
-                print("🏆 NVIDIA NIMs integration: WORKING")
-            print("\n💡 Available style options:")
+                print(" NVIDIA NIMs integration: WORKING")
+            print("\n Available style options:")
             print("   --style layperson (friendly, accessible)")
             print("   --style debate_format (opposing viewpoints)")
             print("   --style tech_interview (technical deep dive)")
@@ -1206,12 +1206,12 @@ async def main():
             print("   --test-multiple (test 3 different styles)")
             print("   --nvidia-only (force NVIDIA NIMs only)")
         else:
-            print("\n⚠️  ISSUES: Some components need attention")
+            print("\n  ISSUES: Some components need attention")
             
         return success
         
     except Exception as e:
-        print(f"❌ Test execution error: {e}")
+        print(f" Test execution error: {e}")
         import traceback
         traceback.print_exc()
         return False
