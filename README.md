@@ -398,7 +398,7 @@ OPENSEARCH_ENDPOINT=your-opensearch-url
 
 This project was developed for the AWS & NVIDIA Agentic AI Hackathon. For questions about the implementation or future collaboration opportunities, please reach out through the hackathon channels.
 
-## 📄 License
+## License
 
 MIT License - See [LICENSE](LICENSE) file for details.
 
