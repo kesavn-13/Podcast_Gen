@@ -7,7 +7,7 @@
 Transform academic research papers into engaging, professionally-produced podcast conversations using autonomous AI agents powered by NVIDIA NIM models and deployed on AWS cloud infrastructure.
 
 ```
-Note: The website is currently down due to exhausted console credits. You can either run it locally or deploy the code on your own console and use the UI to test it
+Note: The website is currently unavailable because the console credits have been exhausted. You can run it locally or deploy the code on your own console to test the UI.
 ```
 
 ## Project Overview
